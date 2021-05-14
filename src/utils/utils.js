@@ -9,6 +9,7 @@ import * as ethUtil from 'ethereumjs-util';
 import { decode } from 'rlp';
 import { T } from './lang';
 import * as Constant from './constant';
+import ERC20ABI from '../abi/ERC20.json';
 /**
  * 格式化菜单数据结构，如果子菜单有权限配置，则子菜单权限优先于父级菜单的配置
  * 如果子菜单没有配置，则继承自父级菜单的配置
@@ -332,21 +333,21 @@ function removeDataFromFile(fileName) {
   global.localStorage.setItem(fileName, JSON.stringify(dataObj));
 }
 
-function storeContractABI(contractAccountName, abiInfo) {
+function storeContractABI(contractAddress, abiInfo) {
   let storedABI = getDataFromFile(Constant.ContractABIFile);
   if (storedABI != null) {
-    storedABI[contractAccountName] = abiInfo;
+    storedABI[contractAddress] = abiInfo;
   } else {
     storedABI = {};
-    storedABI[contractAccountName] = abiInfo;
+    storedABI[contractAddress] = abiInfo;
   }
   storeDataToFile(Constant.ContractABIFile, storedABI);
 }
 
-function getContractABI(contractAccountName) {
+function getContractABI(contractAddress) {
   let storedABI = getDataFromFile(Constant.ContractABIFile);
   if (storedABI != null) {
-    return storedABI[contractAccountName];
+    return storedABI[contractAddress];
   }
   return null;
 }
@@ -562,27 +563,11 @@ function isEqualAddress(addressOne, addressTwo) {
   return checkPrefix(addressOne.toLowerCase()) == checkPrefix(addressTwo.toLowerCase());
 }
 
-function callContractFunc(contractAccountName, funcName, paraTypes, paraValues) {
-  const payload = '0x' + oexchain.utils.getContractPayload(funcName, paraTypes, paraValues);
-  const callInfo = { actionType: 0, from: 'oexchain.founder', to: contractAccountName, assetId: 0, gas: 200000000, gasPrice: 10000000000, value: 0, data: payload, remark: '' };
-  return oexchain.oex.call(callInfo, 'latest');
+function equalWithoutCase(str1, str2) {
+  return str1.toLowerCase() == str2.toLowerCase();
 }
 
-async function checkURC20(contractAccountName) {
-  let result = await callContractFunc(contractAccountName, 'name', [], []);
-  if (result == '0x') return false;
-  result = await callContractFunc(contractAccountName, 'totalSupply', [], []);
-  if (result == '0x') return false;
-  result = await callContractFunc(contractAccountName, 'decimals', [], []);
-  if (result == '0x') return false;
-  result = await callContractFunc(contractAccountName, 'symbol', [], []);
-  if (result == '0x') return false;
-  result = await callContractFunc(contractAccountName, 'balanceOf', ['address'], [contractAccountName]);
-  if (result == '0x') return false;
-  result = await callContractFunc(contractAccountName, 'allowance', ['address', 'address'], [contractAccountName, contractAccountName]);
-  if (result == '0x') return false;
-  return true;
-}
+
 function doSave(value, type, name) {
   var blob;
   if (typeof window.Blob == 'function') {
@@ -640,6 +625,22 @@ function trace(count) {
   // console.log(traceLog);
 }
 
+function isValidAddress(address) {
+  return ethUtil.isValidAddress(address);
+}
+
+
+//判断链接是否存在
+function validateImage(pathImg) {
+	var ImgObj = new Image();
+	ImgObj.src = pathImg;
+	if(ImgObj.fileSize > 0 || (ImgObj.width > 0 && ImgObj.height > 0)) {
+		return true;
+	} else {
+		return false;
+  }
+}
+
 export const sleep = (time) => new Promise((resolve) => setTimeout(resolve, time));
 
 export {
@@ -679,8 +680,10 @@ export {
   parseResult,
   checkPrefix,
   isEqualAddress,
-  checkURC20,
   trace,
   doSave,
   parseAddLiqPayloadInfo,
+  equalWithoutCase,
+  isValidAddress,
+  validateImage
 };

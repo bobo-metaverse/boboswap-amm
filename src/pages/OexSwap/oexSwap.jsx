@@ -11,6 +11,11 @@ import cx from 'classnames';
 import * as abiUtil from 'ethereumjs-abi';
 
 import * as utils from '../../utils/utils';
+import * as BaseUtil from '../../utils/contracts/BaseInfo';
+import * as ERC20Util from '../../utils/contracts/ERC20Util';
+import * as FactoryUtil from '../../utils/contracts/FactoryUtil';
+import * as RouterUtil from '../../utils/contracts/RouterUtil';
+import * as PairUtil from '../../utils/contracts/PairUtil';
 import * as Notification from '../../utils/notification';
 import { T, TUP } from '../../utils/lang';
 import * as Constant from '../../utils/constant';
@@ -47,15 +52,23 @@ export default class OexSwap extends Component {
     const account = utils.getDataFromFile(Constant.AccountObj);
     const txInfoList = utils.getDataFromFile(Constant.TxInfoFile);
     this.state = {
+      web3: null,
+      chainId: 56,
+      accountAddr: '',
+      WETH: '',
+      middleTokenList: [],
+
       account,
       accountName: account != null ? account.accountName : '',
       txInfoList: txInfoList != null ? txInfoList : [],
-      fromInfo: { value: '', maxValue: 0, selectAssetTip: T('选择资产'), selectAssetInfo: null, tmpSelectAssetInfo: null },
-      toInfo: { value: '', maxValue: 0, selectAssetTip: T('选择资产'), selectAssetInfo: null, tmpSelectAssetInfo: null },
+      fromInfo: { value: '', maxValue: 0, selectAssetTip: T('选择通证'), selectAssetInfo: null, tmpSelectAssetInfo: null },
+      toInfo: { value: '', maxValue: 0, selectAssetTip: T('选择通证'), selectAssetInfo: null, tmpSelectAssetInfo: null },
       assetList: [],
       assetSelectorDialogVisible: false,
       swapPoolDialogVisible: false,
       swapPoolDialogData: null,
+
+      tokenApprovedDialogVisible: false,
 
       minerInfoDialogVisible: false,
 
@@ -65,6 +78,8 @@ export default class OexSwap extends Component {
       myOutPoolDialogData: null,
       outPoolValue: 50,
       outPoolAmount: 0,
+      removedAmount0: 0,
+      removedAmount1: 0,
       UiProgressControlKey: 0, // 控制子组件渲染
 
       assetDisplayList: [],
@@ -72,7 +87,7 @@ export default class OexSwap extends Component {
       pairList: [],
       pairMap: {},
       feeRate: 0,
-      curPairInfo: { myPercent: 0 },
+      curPairInfo: { myPercent: 0, impactedPricePercent: 0, minReceivedAmount: 0, feeAmount: 0 },
       contractName: 'oexswaptest012',
       minerContractName: 'oexminertest034',
       liquidToBeRemoved: '',
@@ -96,7 +111,9 @@ export default class OexSwap extends Component {
       miningVisible: false,
       miningInfo: { curMiningOEX: 0, myHavestOEX: 0, miningSettings: [] },
       assetInfoMap: {},
-
+      broswerInfo: {'56': 'https://bscscan.com', '128': 'https://hecoinfo.com'},
+      logoInfo: {'56': 'https://doulaig.oss-cn-hangzhou.aliyuncs.com/wallet/bsc/', '128': 'https://doulaig.oss-cn-hangzhou.aliyuncs.com/wallet/heco/'},
+      platformTokenInfo: {'56': 'https://bscscan.com/stat/supply', '128': 'https://hecoinfo.com/stat/supply'},
       timer: null,
 
       toleranceData: [
@@ -106,6 +123,14 @@ export default class OexSwap extends Component {
         { label: '2%', value: 20 },
         { label: T('自定义'), value: 0 },
       ],
+
+      factoryAddr: '',
+      routerAddr: '',
+
+      curApprovedAssetInfo: {symbol: ''},
+      nextStepFunc: () => {},
+      txStatus: true,
+      usedPairsInfo: {}
     };
   }
 
@@ -113,18 +138,18 @@ export default class OexSwap extends Component {
     eventProxy.on('showMiningInfo', () => this.showMiningInfo());
     eventProxy.on('MinerInfo:invitationHarvest', () => this.setState({ callbackFunc: this.invitationHarvest, txInfoVisible: true }));
     eventProxy.on('MinerInfo:harvest', () => this.setState({ callbackFunc: this.harvest, txInfoVisible: true }));
+    eventProxy.on('web3Inited', web3Info => {
+      this.state.web3 = web3Info.web3;
+      this.setState({chainId: web3Info.chainId, accountAddr: web3Info.accountAddr});
+      this.getDefaultAssets();
+      eventProxy.trigger("updateBroswerURL", this.state.broswerInfo[web3Info.chainId]);
+    });
+    eventProxy.on('txStatus', txStatus => {
+      this.state.txStatus = txStatus;
+    });
 
-    fetch('https://api.oexchain.com/api/rpc/gettokens?pageIndex=0&pageSize=20&stats=10')
-      .then((response) => {
-        return response.json();
-      })
-      .then((tokensInfo) => {
-        if (tokensInfo != null && tokensInfo.data != null) {
-          const assetList = tokensInfo.data.list;
-          const assetDisplayList = this.getAssetDisplayInfo(assetList);
-          this.setState({ assetList, assetDisplayList });
-        }
-      });
+    this.state.usedPairsInfo = JSON.parse(localStorage.getItem('usedPairsInfo') || {});
+
     let nodeInfo = cookie.load('nodeInfo');
     await oexchain.utils.setProvider(nodeInfo);
     var chainConfig = await oexchain.oex.getChainConfig(false);
@@ -141,8 +166,33 @@ export default class OexSwap extends Component {
     oexchain.oex.getSuggestionGasPrice().then((gasPrice) => {
       this.setState({ suggestionPrice: utils.getReadableNumber(gasPrice, 9, 9) });
     });
-    this.state.timer = setInterval(this.updatePool.bind(this), 5000);
+    this.state.timer = setInterval(this.updatePool.bind(this), 500000);
   };
+
+  getDefaultAssets = () => {
+    fetch('https://doulaig.oss-cn-hangzhou.aliyuncs.com/honestswap/defaultAssets.json', 
+        {
+        mode: 'cors', 
+        headers: new Headers({
+          'Accept': 'application/json',
+          "Access-Control-Allow-Origin": "*"
+        })})
+      .then((response) => {
+        return response.json();
+      })
+      .then((tokensInfo) => {
+        if (tokensInfo != null) {
+          const assetList = tokensInfo[this.state.chainId].assets;
+          const assetDisplayList = this.getAssetDisplayInfo(assetList);
+          this.setState({ assetList, assetDisplayList, 
+                          factoryAddr: tokensInfo[this.state.chainId].factoryContract,
+                          routerAddr: tokensInfo[this.state.chainId].routerContract});
+          eventProxy.trigger('updateFactoryAddr', this.state.factoryAddr);
+          eventProxy.trigger('updateRouterAddr', this.state.routerAddr);
+        }
+      });
+  }
+
   componentWillUnmount() {
     clearInterval(this.state.timer);
   }
@@ -153,7 +203,7 @@ export default class OexSwap extends Component {
     if (!this.state.toInfo) return;
     this.updateBaseInfo(this.state.fromInfo, this.state.toInfo);
     this.updateToValue();
-    this.updateUserInfo();
+    //this.updateUserInfo();
   }
 
   getAllPair = async () => {
@@ -228,22 +278,34 @@ export default class OexSwap extends Component {
     return res;
   };
 
+  getPairByAddr = async (pairAddr) => {
+    eventProxy.trigger('updatePairAddr', pairAddr);
+    const reservesInfo = await PairUtil.getReserves();
+    const token0 = await PairUtil.token0();
+    const token1 = await PairUtil.token1();
+    return {firstAssetId: token0, secondAssetId: token1, firstAssetNumber: new BigNumber(reservesInfo.reserve0), secondAssetNumber: new BigNumber(reservesInfo.reserve1)}
+  }
+
+  getPairTotalLiquid = async (pairAddr) => {
+    const totalSupply = await PairUtil.totalSupply(pairAddr);
+    return totalSupply;
+  }
+
+  getUserLiquid = async (pairAddr) => {
+    const balance = await PairUtil.getBalance(this.state.accountAddr, pairAddr);
+    return balance;
+  }
+
   getPairByAssetId = async (firstAssetId, secondAssetId) => {
-    const payloadInfo = { funcName: 'getPair', types: ['uint256', 'uint256'], values: [firstAssetId, secondAssetId] };
-    var pairInfo = await oexchain.action.readContract(this.state.accountName, this.state.contractName, payloadInfo, 'latest');
-    const pairInfoElements = utils.parseResult(['bool', 'uint', 'uint'], pairInfo);
-    pairInfo = {};
-    pairInfo.exist = pairInfoElements[0];
-    pairInfo.index = pairInfoElements[1];
-    pairInfo.firstAssetId = pairInfoElements[2];
+    var pairInfo = await FactoryUtil.getPair(firstAssetId, secondAssetId);
     return pairInfo;
   };
 
-  getPairTotalLiquid = async (pairIndex) => {
-    const payloadInfo = { funcName: 'pairTotalLiquidMap', types: ['uint256'], values: [pairIndex] };
-    const totalLiquid = await oexchain.action.readContract(this.state.accountName, this.state.contractName, payloadInfo, 'latest');
-    return new BigNumber(totalLiquid);
-  };
+  // getPairTotalLiquid = async (pairIndex) => {
+  //   const payloadInfo = { funcName: 'pairTotalLiquidMap', types: ['uint256'], values: [pairIndex] };
+  //   const totalLiquid = await oexchain.action.readContract(this.state.accountName, this.state.contractName, payloadInfo, 'latest');
+  //   return new BigNumber(totalLiquid);
+  // };
 
   getUserLiquidInPair = async (pairIndex) => {
     const payloadInfo = { funcName: 'getUserLiquid', types: ['uint256'], values: [pairIndex] };
@@ -253,79 +315,134 @@ export default class OexSwap extends Component {
     return res;
   };
 
-  addLiquidity = (gasInfo, privateKey) => {
-    const { fromInfo, toInfo, accountName, contractName } = this.state;
-    let actionInfo = { accountName, toAccountName: contractName, assetId: 0, amount: new BigNumber(0), remark: '' };
-
-    const assetInfos = [];
-    assetInfos.push([fromInfo.selectAssetInfo.assetid, '0x' + new BigNumber(fromInfo.value).shiftedBy(fromInfo.selectAssetInfo.decimals).toString(16)]);
-    assetInfos.push([toInfo.selectAssetInfo.assetid, '0x' + new BigNumber(toInfo.value).shiftedBy(toInfo.selectAssetInfo.decimals).toString(16)]);
-    let payloadInfo = { funcName: 'addLiquidity', types: [], values: [], assetInfos };
-
-    oexchain.action.executeContractWithMultiAsset(actionInfo, gasInfo, payloadInfo, privateKey).then((txHash) => {
-      this.checkReceipt(txHash, {
-        txHash,
-        actionInfo: {
-          typeId: 0,
-          typeName: '添加流动性',
-          accountName,
-          inAssetInfo: { assetInfo: fromInfo.selectAssetInfo, amount: fromInfo.value },
-          outAssetInfo: { assetInfo: toInfo.selectAssetInfo, amount: toInfo.value },
-        },
-      });
-    });
-  };
-
-  removeLiquidity = (gasInfo, privateKey) => {
-    const { curPairInfo, liquidToBeRemoved, accountName, contractName, fromInfo } = this.state;
-    const liquidRemoved = '0x' + new BigNumber(liquidToBeRemoved).shiftedBy(this.state.liquidDecimals - 2).toString(16);
-    let actionInfo = { accountName, toAccountName: contractName, assetId: 0, amount: new BigNumber(0), remark: '' };
-    let payloadInfo = { funcName: 'removeLiquidity', types: ['uint256', 'uint256'], values: [curPairInfo.index, liquidRemoved] };
-
-    oexchain.action.executeContract(actionInfo, gasInfo, payloadInfo, privateKey).then((txHash) => {
-      this.checkReceipt(txHash, {
-        txHash,
-        actionInfo: {
-          typeId: 1,
-          typeName: '移除流动性',
-          accountName,
-        },
-      });
-    });
-  };
-
-  swapAsset = (gasInfo, privateKey) => {
-    const { fromInfo, toInfo, curPairInfo, selectedTolerance, inputTolerance, accountName, contractName } = this.state;
-    let actionInfo = {
-      accountName,
-      toAccountName: contractName,
-      assetId: fromInfo.selectAssetInfo.assetid,
-      amount: new BigNumber(fromInfo.value).shiftedBy(fromInfo.selectAssetInfo.decimals),
-      remark: '',
-    };
+  addLiquidity = async () => {
+    const { fromInfo, toInfo, WETH, selectedTolerance, inputTolerance, accountAddr, routerAddr } = this.state;
+    const fromAssetId = fromInfo.selectAssetInfo.assetid;
+    const toAssetId = toInfo.selectAssetInfo.assetid;
+    const fromAllowancedAmount = fromAssetId == '0' ? await BaseUtil.getETHBalance() : await ERC20Util.getAllowance(fromAssetId, accountAddr, routerAddr);
+    const toAllowancedAmount = toAssetId == '0' ? await BaseUtil.getETHBalance() : await ERC20Util.getAllowance(toAssetId, accountAddr, routerAddr);
+    const fromAmount = new BigNumber(fromInfo.value).shiftedBy(fromInfo.selectAssetInfo.decimals);
+    const toAmount = new BigNumber(toInfo.value).shiftedBy(toInfo.selectAssetInfo.decimals);
 
     const tolerance = selectedTolerance > 0 ? selectedTolerance : inputTolerance * 10;
-    var minAmount =
-      '0x' +
-      new BigNumber(toInfo.value)
-        .shiftedBy(toInfo.selectAssetInfo.decimals - 3)
-        .multipliedBy(1000 - tolerance)
-        .toString(16);
-    if (minAmount.indexOf('.') > 0) {
-      minAmount = minAmount.substr(0, minAmount.indexOf('.'));
+    const amountInMin = fromAmount
+                        .multipliedBy(1000 - tolerance)
+                        .dividedBy(1000)
+                        .integerValue();
+    const amountOutMin = toAmount
+                        .multipliedBy(1000 - tolerance)
+                        .dividedBy(1000)
+                        .integerValue();
+    const deadline = Math.floor(new Date().getTime() / 1000) + 60;  
+
+    const addLiq = async () => {
+      if (fromAssetId == '0' || toAssetId == '0') {
+        const value = fromAssetId == '0' ? fromAmount : toAmount;
+        const token = fromAssetId == '0' ? toAssetId : fromAssetId;
+        const amount = fromAssetId == '0' ? toAmount : fromAmount;
+        await RouterUtil.addLiquidityETH(value, token, amount, amountInMin, amountOutMin, accountAddr, deadline);
+      } else {
+        await RouterUtil.addLiquidity(fromAssetId, toAssetId, fromAmount, toAmount, amountInMin, amountOutMin, accountAddr, deadline);
+      }
+      if (this.state.txStatus) {
+        this.updateBaseInfo(fromInfo, toInfo);
+      }
     }
-    let payloadInfo = { funcName: 'exchange', types: ['uint256', 'uint256'], values: [curPairInfo.index, minAmount] };
-    oexchain.action
-      .executeContract(actionInfo, gasInfo, payloadInfo, privateKey)
-      .then((txHash) => {
-        this.checkReceipt(txHash, {
-          txHash,
-          actionInfo: { typeId: 2, typeName: '兑换', accountName, inAssetInfo: { assetInfo: fromInfo.selectAssetInfo, amount: fromInfo.value }, outAssetInfo: { assetInfo: toInfo.selectAssetInfo } },
-        });
-      })
-      .catch((error) => {
-        Notification.displayErrorInfo(error);
-      });
+
+    if (fromAmount.gt(fromAllowancedAmount)) {
+      this.state.nextStepFunc = async () => {
+        await ERC20Util.approve(fromAssetId, routerAddr, new BigNumber(1).shiftedBy(50));
+        if (this.state.txStatus) {
+          if (toAmount.gt(toAllowancedAmount)) {
+            await ERC20Util.approve(toAssetId, routerAddr, new BigNumber(1).shiftedBy(50));
+            if (this.state.txStatus) {
+              addLiq();
+            }
+          } else {
+            addLiq();
+          }
+        }
+      }
+      this.setState({tokenApprovedDialogVisible: true, curApprovedAssetInfo: fromInfo.selectAssetInfo});
+    } else {
+      if (toAmount.gt(toAllowancedAmount)) {
+        await ERC20Util.approve(toAssetId, routerAddr, new BigNumber(1).shiftedBy(50));
+        if (this.state.txStatus) {
+          addLiq();
+        }
+      } else {
+        addLiq();
+      }
+    }
+  };
+
+  // removeLiquidity = (gasInfo, privateKey) => {
+  //   const { curPairInfo, liquidToBeRemoved, accountName, contractName, fromInfo } = this.state;
+  //   const liquidRemoved = '0x' + new BigNumber(liquidToBeRemoved).shiftedBy(this.state.liquidDecimals - 2).toString(16);
+  //   let actionInfo = { accountName, toAccountName: contractName, assetId: 0, amount: new BigNumber(0), remark: '' };
+  //   let payloadInfo = { funcName: 'removeLiquidity', types: ['uint256', 'uint256'], values: [curPairInfo.index, liquidRemoved] };
+
+  //   oexchain.action.executeContract(actionInfo, gasInfo, payloadInfo, privateKey).then((txHash) => {
+  //     this.checkReceipt(txHash, {
+  //       txHash,
+  //       actionInfo: {
+  //         typeId: 1,
+  //         typeName: '移除流动性',
+  //         accountName,
+  //       },
+  //     });
+  //   });
+  // };
+
+  swapAsset = async () => {
+    const { fromInfo, toInfo, WETH, selectedTolerance, inputTolerance, accountAddr, routerAddr } = this.state;
+    const fromAssetId = fromInfo.selectAssetInfo.assetid;
+    const toAssetId = toInfo.selectAssetInfo.assetid;
+    const amountIn = new BigNumber(fromInfo.value).shiftedBy(fromInfo.selectAssetInfo.decimals);
+    
+    const tolerance = selectedTolerance > 0 ? selectedTolerance : inputTolerance * 10;
+    var amountOutMin = new BigNumber(toInfo.value)
+                      .shiftedBy(toInfo.selectAssetInfo.decimals - 3)
+                      .multipliedBy(1000 - tolerance)
+                      .integerValue();
+
+    var path = [fromAssetId, toAssetId];
+    const deadline = Math.floor(new Date().getTime() / 1000) + 60;  
+    // 0表示是平台币
+    if (fromAssetId == '0') {  // amountIn是平台币，不需要进行授权验证
+      path = [WETH.assetid, toAssetId];
+      await RouterUtil.swapExactETHForTokens(amountIn, amountOutMin, path, accountAddr, deadline);
+      if (this.state.txStatus) {
+        this.updateBaseInfo(fromInfo, toInfo);
+      }
+      return;
+    } else if (toAssetId == '0') {  // amountOut是平台币，需要对amountIn进行授权验证
+      path = [fromAssetId, WETH.assetid]
+    }
+
+    const allowancedAmount = await ERC20Util.getAllowance(fromAssetId, accountAddr, routerAddr);
+    if (amountIn.gt(allowancedAmount)) {
+      this.state.nextStepFunc = async () => {
+        await ERC20Util.approve(fromAssetId, routerAddr, new BigNumber(1).shiftedBy(50));
+        if (this.state.txStatus) {
+          Notification.displayNotice(T('开始兑换'), 1500);
+          (toAssetId == '0') ? await RouterUtil.swapExactTokensForETH(amountIn, amountOutMin, path, accountAddr, deadline)
+                              :
+                             await RouterUtil.swapExactTokensForTokens(amountIn, amountOutMin, path, accountAddr, deadline);
+          if (this.state.txStatus) {
+            this.updateBaseInfo(fromInfo, toInfo);
+          }
+        }
+      }
+      this.setState({tokenApprovedDialogVisible: true, curApprovedAssetInfo: fromInfo.selectAssetInfo});
+    } else {
+      (toAssetId == '0') ? await RouterUtil.swapExactTokensForETH(amountIn, amountOutMin, path, accountAddr, deadline)
+                           :
+                           await RouterUtil.swapExactTokensForTokens(amountIn, amountOutMin, path, accountAddr, deadline);
+      if (this.state.txStatus) {
+        this.updateBaseInfo(fromInfo, toInfo);
+      }
+    }
   };
 
   getMiningOEXPerBlock = () => {
@@ -430,10 +547,10 @@ export default class OexSwap extends Component {
   startAddLiquidity = () => {
     const { fromInfo, toInfo } = this.state;
     if (fromInfo.selectAssetInfo == null || fromInfo.value == 0 || toInfo.selectAssetInfo == null || toInfo.value == 0) {
-      Notification.displayWarningInfo('请选择资产并输入有效金额');
+      Notification.displayWarningInfo('请选择通证并输入有效金额');
       return;
     }
-    this.setState({ callbackFunc: this.addLiquidity, txInfoVisible: true });
+    this.addLiquidity();
   };
 
   startRemoveLiquidity = () => {
@@ -442,10 +559,10 @@ export default class OexSwap extends Component {
 
   startSwapAsset = () => {
     if (!this.isPairNormal()) {
-      Notification.displayWarningInfo('交易对尚不存在，无法交易');
+      Notification.displayWarningInfo('交易路径不存在，无法交易');
       return;
     }
-    this.setState({ callbackFunc: this.swapAsset, txInfoVisible: true });
+    this.swapAsset();
   };
 
   getLiquidOfSecondAsset = async (pairIndex, firstAssetAmount) => {
@@ -454,10 +571,11 @@ export default class OexSwap extends Component {
     return neededSecondAssetValue;
   };
 
-  getOutAmount = async (pairIndex, inAmount) => {
+  getOutAmount = async (pairAddr, inAmount) => {
     const { fromInfo, toInfo, feeRate } = this.state;
-    const pairInfo = await this.getPairByIndex(pairIndex);
-    const bFirstAsset = pairInfo.firstAssetId == fromInfo.selectAssetInfo.assetid;
+    const pairInfo = await this.getPairByAddr(pairAddr);
+    const firstAssetId = fromInfo.selectAssetInfo.assetid == '0' ? this.state.WETH.assetid : fromInfo.selectAssetInfo.assetid;
+    const bFirstAsset = pairInfo.firstAssetId == firstAssetId;
     var outValue;
     var x;
     var y;
@@ -471,33 +589,37 @@ export default class OexSwap extends Component {
   };
 
   assetRender = (item) => {
-    return item.assetName + '(' + item.symbol + ')';
+    return item.name + '(' + item.symbol + ')';
   };
 
-  // 每隔5秒更新用户资产信息
+  // 每隔5秒更新用户通证信息
   async updateUserInfo() {
-    const account = await oexchain.account.getAccountByName(this.state.accountName);
-    const { fromInfo, toInfo } = this.state;
+    const { fromInfo, toInfo, web3, accountAddr } = this.state;
     const infos = [fromInfo, toInfo];
-    infos.forEach((info) => {
-      if (!info.selectAssetInfo) return;
-      const balanceInfo = account.balances.find((v) => v.assetID == info.selectAssetInfo.assetid);
-      const amount = balanceInfo ? new BigNumber(balanceInfo.balance).shiftedBy(info.selectAssetInfo.decimals * -1).toFixed(info.selectAssetInfo.decimals) : 0;
+
+    for (var i = 0; i < infos.length; i++) {
+      const info = infos[i];
+      if (!info.selectAssetInfo) continue;
+      const balance = await ERC20Util.getBalance(info.assetid, accountAddr);
+      const amount = balance.shiftedBy(info.selectAssetInfo.decimals * -1).toFixed(info.selectAssetInfo.decimals);
       info.maxValue = amount;
-    });
-    this.setState({ fromInfo, toInfo, account });
+    }
+
+    this.setState({ fromInfo, toInfo });
   }
 
   onSelectAssetOK = async () => {
-    const { fromInfo, toInfo, account, isFromAsset } = this.state;
+    const { fromInfo, toInfo, accountAddr, isFromAsset, web3 } = this.state;
 
     const tmpSelectAssetInfo = isFromAsset ? fromInfo.tmpSelectAssetInfo : toInfo.tmpSelectAssetInfo;
     if (tmpSelectAssetInfo == null) {
-      Notification.displayWarningInfo('请选择资产');
+      Notification.displayWarningInfo('请选择通证');
       return;
     }
-    const balanceInfo = account.balances.find((v) => v.assetID == tmpSelectAssetInfo.assetid);
-    const amount = balanceInfo != null ? new BigNumber(balanceInfo.balance).shiftedBy(tmpSelectAssetInfo.decimals * -1).toFixed(tmpSelectAssetInfo.decimals) : 0;
+    const balance = (tmpSelectAssetInfo.assetid == '0') ? await BaseUtil.getETHBalance() :
+                                                        await ERC20Util.getBalance(tmpSelectAssetInfo.assetid, accountAddr);
+    const amount = balance.shiftedBy(tmpSelectAssetInfo.decimals * -1).toFixed(tmpSelectAssetInfo.decimals);
+
     if (isFromAsset) {
       fromInfo.selectAssetInfo = tmpSelectAssetInfo;
       fromInfo.selectAssetTip = tmpSelectAssetInfo.symbol.toUpperCase();
@@ -512,31 +634,75 @@ export default class OexSwap extends Component {
     this.updateBaseInfo(fromInfo, toInfo);
   };
 
+  findBestSwapPath = async (amountIn, fromAssetId, toAssetId) => {
+    var path = [fromAssetId, toAssetId];
+    var amountsOutDirectly = await RouterUtil.getAmountsOut(amountIn, path);
+    console.log(path, amountsOutDirectly)
+    var amountOut = amountsOutDirectly[1];
+    for(var i = 0; i < this.state.middleTokenList.length; i++) {
+      const middleToken = this.state.middleTokenList[i];
+      const multiPath = [fromAssetId, middleToken.assetid, toAssetId];
+      try {
+        const amountsOut = await RouterUtil.getAmountsOut(amountIn, multiPath);
+        console.log(multiPath, amountsOut)
+        if (new BigNumber(amountsOut[amountsOut.length - 1]).gt(new BigNumber(amountOut))) {
+          amountOut = amountsOut[amountsOut.length - 1];
+          path = multiPath;
+        }
+      } catch (error) {
+        console.log('路径无效', multiPath)
+      }
+    };
+    return path;
+  }
+
   updateBaseInfo = async (fromInfo, toInfo) => {
     if (fromInfo.selectAssetInfo != null && toInfo.selectAssetInfo != null) {
-      const curPairInfo = await this.getPairByAssetId(fromInfo.selectAssetInfo.assetid, toInfo.selectAssetInfo.assetid);
+      const fromAssetId = fromInfo.selectAssetInfo.assetid == '0' ? this.state.WETH.assetid : fromInfo.selectAssetInfo.assetid;
+      const toAssetId = toInfo.selectAssetInfo.assetid == '0' ? this.state.WETH.assetid : toInfo.selectAssetInfo.assetid;
+      //const path = await this.findBestSwapPath(new BigNumber(1).shiftedBy(18), fromAssetId, toAssetId);
+      const curPairInfo = await this.getPairByAssetId(fromAssetId, toAssetId);
       if (curPairInfo.exist) {
-        curPairInfo.index -= 1;
-        const totalLiquid = await this.getPairTotalLiquid(curPairInfo.index);
-        const userLiquid = await this.getUserLiquidInPair(curPairInfo.index, this.state.account.accountID);
+        if (this.state.usedPairsInfo[curPairInfo.pairAddr] != true) {
+          this.state.usedPairsInfo[curPairInfo.pairAddr] = {firstAsset: (fromInfo.selectAssetInfo.assetid == '0' ? this.state.WETH : fromInfo.selectAssetInfo), 
+                                                            secondAsset: (toInfo.selectAssetInfo.assetid == '0' ? this.state.WETH : toInfo.selectAssetInfo)};
+          localStorage.setItem('usedPairsInfo', JSON.stringify(this.state.usedPairsInfo));
+        }
+        const totalLiquid = await ERC20Util.totalSupply(curPairInfo.pairAddr);
+        const userLiquid = await ERC20Util.getBalance(curPairInfo.pairAddr, this.state.accountAddr);
         curPairInfo.totalLiquid = totalLiquid.multipliedBy(100);
         curPairInfo.userLiquid = userLiquid.multipliedBy(100);
         curPairInfo.myPercent = userLiquid.dividedBy(totalLiquid).multipliedBy(100).toFixed(2);
+        curPairInfo.feeAmount = new BigNumber(fromInfo.value).multipliedBy(this.state.feeRate).shiftedBy(-3).toFixed(6).toString().replace(/(?:\.0*|(\.\d+?)0+)$/,'$1');
+        curPairInfo.minReceivedAmount = 0;
 
-        const pairInfo = await this.getPairByIndex(curPairInfo.index);
+        const pairInfo = await this.getPairByAddr(curPairInfo.pairAddr);
         var firstAssetInfo = fromInfo.selectAssetInfo;
         var secondAssetInfo = toInfo.selectAssetInfo;
-        if (pairInfo.firstAssetId != firstAssetInfo.assetid) {
+        if (pairInfo.firstAssetId != fromAssetId) {
           firstAssetInfo = toInfo.selectAssetInfo;
           secondAssetInfo = fromInfo.selectAssetInfo;
+          curPairInfo.firstAssetSymbol = toInfo.selectAssetInfo.symbol;
+          curPairInfo.secondAssetSymbol = fromInfo.selectAssetInfo.symbol;
+        } else {
+          curPairInfo.firstAssetSymbol = fromInfo.selectAssetInfo.symbol;
+          curPairInfo.secondAssetSymbol = toInfo.selectAssetInfo.symbol;
         }
+
         this.state.liquidDecimals = firstAssetInfo.decimals;
         curPairInfo.totalLiquid = curPairInfo.totalLiquid.shiftedBy(this.state.liquidDecimals * -1);
         curPairInfo.userLiquid = curPairInfo.userLiquid.shiftedBy(this.state.liquidDecimals * -1);
+        curPairInfo.firstAssetNumber = pairInfo.firstAssetNumber;
+        curPairInfo.secondAssetNumber = pairInfo.secondAssetNumber;
+        curPairInfo.firstAssetId = pairInfo.firstAssetId;
+        curPairInfo.secondAssetId = pairInfo.secondAssetId;
 
         const firstAssetAmount = pairInfo.firstAssetNumber.shiftedBy(firstAssetInfo.decimals * -1).toFixed(6);
         const secondAssetAmount = pairInfo.secondAssetNumber.shiftedBy(secondAssetInfo.decimals * -1).toFixed(6);
         this.setPairAssetInfo(firstAssetAmount, firstAssetInfo, secondAssetAmount, secondAssetInfo);
+      } else {
+        this.setPairAssetInfo(0, fromInfo.selectAssetInfo, 0, toInfo.selectAssetInfo);
+        Notification.displayWarningInfo('交易路径不存在，无法交易');
       }
       this.setState({ curPairInfo });
     }
@@ -582,8 +748,15 @@ export default class OexSwap extends Component {
   };
 
   getAssetDisplayInfo = (assetList) => {
-    const { fromInfo, toInfo, isFromAsset } = this.state;
+    const { fromInfo, toInfo, isFromAsset, chainId } = this.state;
+    this.state.middleTokenList = [];
     const assetDisplayList = assetList.map((assetInfo) => {
+      if (assetInfo.wrappedETH) {
+        this.state.WETH = assetInfo;
+      }
+      if (assetInfo.middleToken) {
+        this.state.middleTokenList.push(assetInfo);
+      }
       const symbol = assetInfo.symbol.toUpperCase();
       const tmpSelectAssetInfo = isFromAsset ? fromInfo.tmpSelectAssetInfo : toInfo.tmpSelectAssetInfo;
       const classNames = ['ui-assetInfo'];
@@ -600,20 +773,31 @@ export default class OexSwap extends Component {
           needBtn = assetInfo.assetid != fromInfo.selectAssetInfo.assetid;
         }
       }
+      var imgExist = true;
+      if (assetInfo.assetid != '0' && !utils.validateImage(this.state.logoInfo[this.state.chainId] + assetInfo.assetid.toLowerCase() + '.png')) {
+        imgExist = false;
+      }
       return (
         <div key={assetInfo.symbol} className={classNames.join(' ')} style={{ cursor: needBtn ? 'pointer' : 'default' }} onClick={() => needBtn && this.clickAsset(assetInfo)}>
-          <font className="ui-assetInfo-account">
-            {T('持有账户数:')} {assetInfo.stats}
-          </font>
-          <img src={assetInfo.assetid == 0 ? oexTokenLogo : otherTokenLogo} />
+          <a className="ui-assetInfo-account" target='_blank' 
+                href={assetInfo.assetid == '0' ? this.state.platformTokenInfo[chainId] : this.state.broswerInfo[this.state.chainId] + '/token/' + assetInfo.assetid}><u>{T('通证详情')}</u></a>
+          {
+            imgExist ? <img src={this.state.logoInfo[this.state.chainId] + (assetInfo.assetid == '0' ? assetInfo.logoAddr : assetInfo.assetid).toLowerCase() + '.png'} />
+                      :
+                      <input type="button" value={assetInfo.symbol.length > 3 ? assetInfo.symbol.substr(0, 3) : assetInfo.symbol} className='ui-logo'></input>
+          }
+          
           <div className="ui-assetInfo-symbol">
             {symbol}
-            <span>ID:{assetInfo.assetid}</span>
+            {
+              assetInfo.assetid == '0' ? '' : <span>地址:{assetInfo.assetid.substr(0, 6) + '...' + assetInfo.assetid.substr(assetInfo.assetid.length - 4)}</span>
+            }
+            
           </div>
-          <span>{assetInfo.assetName}</span>
+          <span>{assetInfo.name}</span>
           {needBtn ? (
             <div className="ui-btn" onClick={() => this.clickAsset(assetInfo)}>
-              {T('选择此资产').toLocaleUpperCase()}
+              {T('选择此通证').toLocaleUpperCase()}
             </div>
           ) : (
             ''
@@ -637,30 +821,25 @@ export default class OexSwap extends Component {
 
   searchAsset = async () => {
     if (utils.isEmptyObj(this.state.assetContent)) {
-      Notification.displayWarningInfo('请输入资产ID或资产全名');
+      Notification.displayWarningInfo('请输入通证地址/名称');
       return;
     }
     var assetList = this.getAssetInfos(this.state.assetContent);
 
-    if (assetList.length == 0 || (assetList[0].assetName != this.state.assetContent && assetList[0].assetid != this.state.assetContent)) {
+    if (assetList.length == 0 || (!utils.equalWithoutCase(assetList[0].symbol, this.state.assetContent) 
+                                  && !utils.equalWithoutCase(assetList[0].assetid, this.state.assetContent))) {
       if (this.state.assetContent.charAt(0) >= 0 && this.state.assetContent.charAt(0) <= 9) {
         try {
-          const assetInfo = await oexchain.account.getAssetInfoById(parseInt(this.state.assetContent));
-          assetInfo.assetid = assetInfo.assetId;
+          const assetInfo = await ERC20Util.checkERC20(this.state.web3, this.state.assetContent);
+          //assetInfo.assetid = assetInfo.assetId;
           assetList = [assetInfo, ...assetList];
         } catch (error) {
-          Notification.displayWarningInfo('资产不存在');
+          Notification.displayWarningInfo('通证不存在');
           return;
         }
       } else {
-        try {
-          const assetInfo = await oexchain.account.getAssetInfoByName(this.state.assetContent);
-          assetInfo.assetid = assetInfo.assetId;
-          assetList = [assetInfo, ...assetList];
-        } catch (error) {
-          Notification.displayWarningInfo('资产不存在');
-          return;
-        }
+        Notification.displayWarningInfo('通证不存在');
+        return;
       }
     }
 
@@ -670,7 +849,8 @@ export default class OexSwap extends Component {
 
   getAssetInfos = (assetContent) => {
     const { assetList } = this.state;
-    const index = assetList.findIndex((assetInfo) => assetInfo.assetid == assetContent || assetInfo.assetName == assetContent);
+    const index = assetList.findIndex((assetInfo) => assetInfo.assetid.toUpperCase() == assetContent.toUpperCase() 
+                                                  || assetInfo.symbol.toUpperCase() == assetContent.toUpperCase());
     if (index > -1) {
       const assetInfo = assetList[index];
       return [assetInfo, ...assetList.filter((v, i) => i != index)];
@@ -769,20 +949,47 @@ export default class OexSwap extends Component {
   };
 
   updateToValue = () => {
-    const { fromInfo, toInfo, curPairInfo } = this.state;
+    const { fromInfo, toInfo, curPairInfo, selectedTolerance, inputTolerance } = this.state;
+    if (fromInfo.selectAssetInfo == null || toInfo.selectAssetInfo == null) return;
+
+    const firstAssetId = fromInfo.selectAssetInfo.assetid == '0' ? this.state.WETH.assetid : fromInfo.selectAssetInfo.assetid;
     if (this.isPairNormal() && fromInfo.value > 0) {
       const toDecimals = toInfo.selectAssetInfo.decimals;
       if (!this.state.bLiquidOp) {
-        this.getOutAmount(curPairInfo.index, this.state.fromInfo.value).then((outAmount) => {
+        this.getOutAmount(curPairInfo.pairAddr, this.state.fromInfo.value).then((outAmount) => {
           //outAmount = new BigNumber(outAmount).shiftedBy(this.state.toInfo.selectAssetInfo.decimals * -1).toString();
           this.state.toInfo.value = outAmount.toFixed(toDecimals, 1);
-          this.setState({ toInfo: this.state.toInfo });
+          const tolerance = selectedTolerance > 0 ? selectedTolerance : inputTolerance * 10;
+          curPairInfo.minReceivedAmount = outAmount.multipliedBy(1000 - tolerance).dividedBy(1000).toFixed(6).toString().replace(/(?:\.0*|(\.\d+?)0+)$/,'$1');
+          
+          const fromValue = new BigNumber(fromInfo.value).shiftedBy(fromInfo.selectAssetInfo.decimals);
+          const toValue = new BigNumber(this.state.toInfo.value).shiftedBy(toInfo.selectAssetInfo.decimals);
+          var oldPrice = 0;
+          var newPrice = 0;
+          var deltaDecimals = 0;       
+          if (firstAssetId.toUpperCase() == curPairInfo.firstAssetId.toUpperCase()) {
+            deltaDecimals = toInfo.selectAssetInfo.decimals - fromInfo.selectAssetInfo.decimals;
+            oldPrice = curPairInfo.firstAssetNumber.shiftedBy(deltaDecimals).dividedBy(curPairInfo.secondAssetNumber);
+            newPrice = curPairInfo.firstAssetNumber.plus(fromValue).shiftedBy(deltaDecimals).dividedBy(curPairInfo.secondAssetNumber.minus(toValue));
+            curPairInfo.impactedPricePercent = newPrice.minus(oldPrice).dividedBy(oldPrice).multipliedBy(100).toFixed(2);
+          } else {
+            deltaDecimals = fromInfo.selectAssetInfo.decimals - toInfo.selectAssetInfo.decimals;
+            oldPrice = curPairInfo.firstAssetNumber.shiftedBy(deltaDecimals).dividedBy(curPairInfo.secondAssetNumber);
+            newPrice = curPairInfo.firstAssetNumber.minus(toValue).shiftedBy(deltaDecimals).dividedBy(curPairInfo.secondAssetNumber.plus(fromValue));
+            curPairInfo.impactedPricePercent = oldPrice.minus(newPrice).dividedBy(oldPrice).multipliedBy(100).toFixed(2);
+          }
+          curPairInfo.oldPrice = oldPrice;
+          curPairInfo.newPrice = newPrice;
+          
+          console.log(oldPrice.toFixed(6), newPrice.toFixed(6), curPairInfo.impactedPricePercent);
+              
+          this.setState({ toInfo: this.state.toInfo, curPairInfo });
         });
       } else {
-        this.getPairByIndex(curPairInfo.index).then((pairInfo) => {
+        this.getPairByAddr(curPairInfo.pairAddr).then((pairInfo) => {
           var outValue;
           const fromAmount = new BigNumber(fromInfo.value).shiftedBy(fromInfo.selectAssetInfo.decimals - toDecimals);
-          if (fromInfo.selectAssetInfo.assetid == pairInfo.firstAssetId) {
+          if (firstAssetId == pairInfo.firstAssetId) {
             outValue = pairInfo.secondAssetNumber.multipliedBy(fromAmount).dividedBy(pairInfo.firstAssetNumber);
           } else {
             outValue = pairInfo.firstAssetNumber.multipliedBy(fromAmount).dividedBy(pairInfo.secondAssetNumber);
@@ -877,10 +1084,10 @@ export default class OexSwap extends Component {
     const assetTwoSymbol = assetTwoInfo ? assetTwoInfo.symbol.toUpperCase() : '';
     return (
       <div>
-        <div className="ui-color-primary" title={assetTwoInfo && assetTwoInfo.assetName}>
+        <div className="ui-color-primary" title={assetTwoInfo && assetTwoInfo.name}>
           {assetOneSymbol} [ID: {assetOneId}]
         </div>
-        <div title={assetTwoInfo && assetTwoInfo.assetName}>
+        <div title={assetTwoInfo && assetTwoInfo.name}>
           {assetTwoSymbol} [ID: {assetTwoId}]
         </div>
       </div>
@@ -966,62 +1173,51 @@ export default class OexSwap extends Component {
     this.setState({ swapPoolDialogData: null, swapPoolDialogVisible: true });
   }
 
+  updateLiquidityInfo = async () => {
+    // const { fromInfo, toInfo } = this.state;
+    // if (fromInfo.selectAssetInfo == null || toInfo.selectAssetInfo == null) return;
+
+    const mySwapPoolDialogData = [];
+    this.state.mySwapPoolDialogData = [];
+    this.setState({ mySwapPoolDialogData: [] });
+
+    for (var pairAddr in this.state.usedPairsInfo) {
+      const usedPair = this.state.usedPairsInfo[pairAddr];
+      const data = {
+        pairAddr,
+        firstAsset: usedPair.firstAsset,
+        secondAsset: usedPair.secondAsset,
+        totalLiquid: 0,
+        userLiquid: 0,
+        myPercent: 0,
+        bigRemoveNum: 0,
+        firstAssetReserve: 0,
+        secondAssetReserve: 0,
+      };
+      data.totalLiquid = await this.getPairTotalLiquid(pairAddr);
+      data.userLiquid = await this.getUserLiquid(pairAddr);
+      const totalLiquid = data.totalLiquid;
+      const userLiquid = data.userLiquid;
+      if (userLiquid.gt(new BigNumber(0))) {
+        data.myPercent = userLiquid.dividedBy(totalLiquid).multipliedBy(100).toFixed(2);
+        data.bigRemoveNum = userLiquid;
+        const reserves = await PairUtil.getReserves(pairAddr);
+        data.firstAssetReserve = new BigNumber(reserves.reserve0).multipliedBy(userLiquid).dividedBy(totalLiquid);
+        data.secondAssetReserve = new BigNumber(reserves.reserve1).multipliedBy(userLiquid).dividedBy(totalLiquid);
+        mySwapPoolDialogData.push(data);
+        this.setState({ mySwapPoolDialogData });
+      }
+    }
+  }
+
   /**
    * 用户开启【我的资金池】界面，开始加载自己的流动性数据
    */
-  openMySwapPoolDialog() {
-    const mySwapPoolDialogData = [];
-    // 优先加载已知的提供流动性数据
-    const myPairList = this.state.pairList.filter((item) => UserPairIndexList.includes(item.index));
-    const otherPairList = this.state.pairList.filter((item) => !UserPairIndexList.includes(item.index));
-    Promise.all(myPairList.map((item) => this.getUserPaire(mySwapPoolDialogData, item, true))).then(() => {
-      otherPairList.forEach((item) => this.getUserPaire(mySwapPoolDialogData, item)); // 必要数据加载完后，再判断非必要数据
-    });
+  openMySwapPoolDialog = async () => {
+    this.updateLiquidityInfo();
     this.setState({ mySwapPoolDialogVisible: true });
   }
-  // loadingFirst 是否在加载前就展示出占位的样式
-  async getUserPaire(mySwapPoolDialogData, pairInfo, loadingFirst = false) {
-    const render = () => this.setState({ mySwapPoolDialogData: mySwapPoolDialogData.filter((item) => item.display) });
-    const data = {
-      key: pairInfo.index,
-      display: true, // 默认显示
-      firstAsset: null,
-      secondAsset: null,
-      totalLiquid: 0,
-      userLiquid: 0,
-      myPercent: 0,
-      bigRemoveNum: 0,
-    };
-    if (loadingFirst) {
-      mySwapPoolDialogData.push(data);
-      render();
-    }
-    const [userLiquid, totalLiquid, firstAsset, secondAsset] = await Promise.all([
-      this.getUserLiquidInPair(pairInfo.index, this.state.account.accountID),
-      this.getPairTotalLiquid(pairInfo.index),
-      getAssetInfoById(pairInfo.firstAssetId),
-      getAssetInfoById(pairInfo.secondAssetId),
-    ]);
-    if (userLiquid.isEqualTo(0) || totalLiquid.isEqualTo(0)) {
-      data.display = false;
-      popFromUserPairIndexList(pairInfo.index);
-      return render(); // 没有流动性提供
-    }
-    Object.assign(data, {
-      pairInfo,
-      key: pairInfo.index,
-      firstAsset,
-      secondAsset,
-      totalLiquid: totalLiquid.multipliedBy(100).toNumber(),
-      userLiquid: userLiquid.multipliedBy(100).toNumber(),
-      myPercent: userLiquid.dividedBy(totalLiquid).multipliedBy(100).toFixed(2),
-      bigRemoveNum: userLiquid.multipliedBy(100).shiftedBy(-firstAsset.decimals).toNumber(),
-      bigRemoveBigNum: userLiquid.multipliedBy(100),
-    });
-    if (!loadingFirst) mySwapPoolDialogData.push(data);
-    render();
-    pushToUserPairIndexList(pairInfo.index);
-  }
+
   // 打开退出流动性弹窗
   outPoolDialogOpen(item) {
     this.state.myOutPoolDialogData = item;
@@ -1031,18 +1227,77 @@ export default class OexSwap extends Component {
   outPoolAmountChange(evt) {
     const val = new BigNumber(evt.currentTarget.value);
     if (val.isNaN()) return;
-    const { bigRemoveBigNum, firstAsset } = this.state.myOutPoolDialogData;
-    const outPoolValue = val.shiftedBy(firstAsset.decimals).dividedBy(bigRemoveBigNum).multipliedBy(100).toNumber();
-    this.setState({ outPoolValue, outPoolAmount: val.toNumber(), UiProgressControlKey: ++this.state.UiProgressControlKey });
+    const { bigRemoveNum } = this.state.myOutPoolDialogData;
+    const outPoolValue = val.shiftedBy(18).dividedBy(bigRemoveNum).multipliedBy(100).toNumber();
+    this.setState({ outPoolValue, outPoolAmount: val.shiftedBy(18).toNumber(), UiProgressControlKey: ++this.state.UiProgressControlKey });
   }
   updateOutPoolValue(outPoolValue) {
-    const { bigRemoveBigNum, firstAsset } = this.state.myOutPoolDialogData;
-    const amount = bigRemoveBigNum.multipliedBy(outPoolValue).dividedBy(100).shiftedBy(-firstAsset.decimals).toNumber();
-    this.setState({ outPoolValue, outPoolAmount: amount });
+    const { bigRemoveNum, firstAssetReserve, secondAssetReserve, firstAsset } = this.state.myOutPoolDialogData;
+    const amount = bigRemoveNum.multipliedBy(outPoolValue).dividedBy(100).shiftedBy(-18).toNumber();
+    const removedAmount0 = firstAssetReserve.multipliedBy(outPoolValue).dividedBy(100);
+    const removedAmount1 = secondAssetReserve.multipliedBy(outPoolValue).dividedBy(100);
+    this.setState({ outPoolValue, outPoolAmount: amount, removedAmount0, removedAmount1 });
   }
   myOutPoolSubmit() {
-    this.setState({ myOutPoolDialogVisible: false, callbackFunc: this.removeLiquidity2, txInfoVisible: true });
+    this.removeLiquidity();
+    this.setState({ myOutPoolDialogVisible: false });
   }
+
+  removeLiquidity = async () => {
+    const { firstAsset, secondAsset, pairAddr } = this.state.myOutPoolDialogData;
+    const { outPoolAmount, removedAmount0, removedAmount1, accountAddr, selectedTolerance, inputTolerance, routerAddr, fromInfo, toInfo } = this.state;
+    
+    const liquidity = new BigNumber(outPoolAmount).shiftedBy(18);
+    const tolerance = selectedTolerance > 0 ? selectedTolerance : inputTolerance * 10;
+    const amount0Min = removedAmount0
+                      .multipliedBy(1000 - tolerance)
+                      .dividedBy(1000)
+                      .integerValue();
+    const amount1Min = removedAmount1
+                      .multipliedBy(1000 - tolerance)
+                      .dividedBy(1000)
+                      .integerValue();
+    const deadline = Math.floor(new Date().getTime() / 1000) + 600;  
+
+    const fromAssetId = firstAsset.assetid;
+    const toAssetId = secondAsset.assetid;
+    const allowancedAmount = await ERC20Util.getAllowance(pairAddr, accountAddr, routerAddr);  // pairAddr同时也是ERC20地址，因为pair继承了ERC20
+    if (liquidity.gt(allowancedAmount)) {
+      this.state.nextStepFunc = async () => {
+        await ERC20Util.approve(pairAddr, routerAddr, new BigNumber(1).shiftedBy(50));
+        if (this.state.txStatus) {
+          if (firstAsset.wrappedETH || secondAsset.wrappedETH) {
+            const token = firstAsset.wrappedETH ? toAssetId : fromAssetId;
+            const amountTokenMin = firstAsset.wrappedETH ? amount1Min : amount0Min;
+            const amountETHMin = firstAsset.wrappedETH ? amount0Min : amount1Min;
+            await RouterUtil.removeLiquidityETH(token, liquidity, amountTokenMin, amountETHMin, accountAddr, deadline);
+          } else {
+            await RouterUtil.removeLiquidity(fromAssetId, toAssetId, liquidity, amount0Min, amount1Min, accountAddr, deadline);
+          }
+
+          if (this.state.txStatus) {
+            this.updateLiquidityInfo();
+            this.updateBaseInfo(fromInfo, toInfo);
+          }
+        }
+      }
+      this.setState({tokenApprovedDialogVisible: true, curApprovedAssetInfo: {symbol: ''}});
+    } else {
+      if (firstAsset.wrappedETH || secondAsset.wrappedETH) {
+        const token = firstAsset.wrappedETH ? toAssetId : fromAssetId;
+        const amountTokenMin = firstAsset.wrappedETH ? amount1Min : amount0Min;
+        const amountETHMin = firstAsset.wrappedETH ? amount0Min : amount1Min;
+        await RouterUtil.removeLiquidityETH(token, liquidity, amountTokenMin, amountETHMin, accountAddr, deadline);
+      } else {
+        await RouterUtil.removeLiquidity(fromAssetId, toAssetId, liquidity, amount0Min, amount1Min, accountAddr, deadline);
+      }
+      if (this.state.txStatus) {
+        this.updateLiquidityInfo();
+        this.updateBaseInfo(fromInfo, toInfo);
+      }
+    }
+  }
+
   removeLiquidity2 = (gasInfo, privateKey) => {
     const { firstAsset, pairInfo, secondAsset } = this.state.myOutPoolDialogData;
     const { outPoolAmount, contractName, accountName } = this.state;
@@ -1096,6 +1351,7 @@ export default class OexSwap extends Component {
         <img src={PNG_max} style={{ marginRight: '12px', cursor: 'pointer' }} onClick={() => this.inputMaxToAmount()} />
       </div>
     );
+    const symbolUnit = this.state.curPairInfo.firstAssetSymbol + '/' + this.state.curPairInfo.secondAssetSymbol;
     return (
       <div>
         <Row justify="center" align="center" style={{ height: window.innerHeight }}>
@@ -1115,10 +1371,10 @@ export default class OexSwap extends Component {
                     <font>{T('余额：')}</font>
                     <font>{this.state.fromInfo.maxValue}</font>
                   </div>
-                  <font>
-                    {T('资产ID：')}
+                  {/* <font>
+                    {T('通证ID：')}
                     {this.state.fromInfo.selectAssetInfo && this.state.fromInfo.selectAssetInfo.assetid}
-                  </font>
+                  </font> */}
                 </div>
                 <div>
                   <Input
@@ -1128,7 +1384,11 @@ export default class OexSwap extends Component {
                     //onChange={(v) => this.changeFromValue.bind(this)}
                     onChange={(v) => {
                       this.state.fromInfo.value = v;
-                      this.setState({ fromInfo: this.state.fromInfo });
+                      var feeAmount = new BigNumber(v).multipliedBy(this.state.feeRate).shiftedBy(-3).toFixed(6).toString();
+                      const regexp = /(?:\.0*|(\.\d+?)0+)$/;
+                      feeAmount = feeAmount.replace(regexp,'$1');
+                      this.state.curPairInfo.feeAmount = feeAmount;
+                      this.setState({ fromInfo: this.state.fromInfo, curPairInfo: this.state.curPairInfo });
                     }}
                     onBlur={() => this.updateToValue()}
                     innerAfter={fromAmountInput}
@@ -1142,10 +1402,10 @@ export default class OexSwap extends Component {
                     <font>{T('余额：')}</font>
                     <font>{this.state.toInfo.maxValue}</font>
                   </div>
-                  <font>
-                    {T('资产ID：')}
+                  {/* <font>
+                    {T('通证ID：')}
                     {this.state.toInfo.selectAssetInfo && this.state.toInfo.selectAssetInfo.assetid}
-                  </font>
+                  </font> */}
                 </div>
                 <div>
                   <Input
@@ -1182,17 +1442,42 @@ export default class OexSwap extends Component {
               </Row>
               <Row justify="start" align="center" className="ui-swap-info-row">
                 <font>{T('兑换手续费：')}</font>
+                {
+                  (this.state.fromInfo.selectAssetInfo != null && this.state.curPairInfo.feeAmount > 0) ? 
+                  <div style={{ float: 'right' }}>(
+                    {this.state.curPairInfo.feeAmount}{this.state.fromInfo.selectAssetInfo.symbol}
+                    )
+                  </div> : ''
+                }
                 <div style={{ float: 'right' }}>{this.state.feeRate / 10} %</div>
               </Row>
               <Row justify="start" align="center" className="ui-swap-info-row">
                 <font>{T('您的流动性占比：')}</font>
                 <div style={{ float: 'right' }}>{this.state.curPairInfo.myPercent} %</div>
-                {/* {this.state.curPairInfo.myPercent > 0 && (
-                  <Button type="primary" className="maxButton" style={{ marginLeft: '20px', width: '80px' }} onClick={() => this.startRemoveLiquidity()}>
-                    取回流动性
-                  </Button>
-                )} */}
               </Row>
+              {
+                this.state.bLiquidOp ? '' :  
+                                    <Row justify="start" align="center" className="ui-swap-info-row">
+                                      <font>{T('价格影响：')}</font>
+                                      {
+                                        (this.state.curPairInfo.oldPrice != null && this.state.curPairInfo.newPrice != null) ? 
+                                          <div style={{ float: 'right' }}>
+                                            (
+                                            {this.state.curPairInfo.oldPrice.toFixed(2)} {'->'} {this.state.curPairInfo.newPrice.toFixed(2)}{' '} {symbolUnit}
+                                            )
+                                          </div> : ''
+                                      }
+                                      
+                                      <div style={{ float: 'right' }}>{this.state.curPairInfo.impactedPricePercent} %</div>
+                                    </Row>
+              }
+              {
+                this.state.bLiquidOp ? '' :  
+                                    <Row justify="start" align="center" className="ui-swap-info-row">
+                                      <font>{T('最低收到：')}</font>
+                                      <div style={{ float: 'right' }}>{this.state.curPairInfo.minReceivedAmount + (this.state.toInfo.selectAssetInfo ? this.state.toInfo.selectAssetInfo.symbol : '')} </div>
+                                    </Row>
+              }
               {this.state.bLiquidOp ? (
                 <Row justify="start" align="center" className="ui-swap-info-row">
                   <font>{T('流动池数量')}</font>
@@ -1200,27 +1485,29 @@ export default class OexSwap extends Component {
                     资金池详情 &gt;
                   </span> */}
                   {this.state.pairAssetInfo}
-                  {this.isPairNormal() > 0 && (
+                  {(
                     <div className="ui-my-pairInfo" onClick={() => this.openMySwapPoolDialog()}>
                       <div></div>
-                      <div>{T('我的做市')}</div>
+                      <div>{T('我添加的流动性')}</div>
                       <div>&gt;</div>
                     </div>
                   )}
                 </Row>
               ) : (
-                <div className="ui-pairInfo">
-                  <div style={{ color: '#0C5453', fontSize: '12px', textAlign: 'center', margin: '10px 0' }}>{T('当前资金池流动性总量')}</div>
-                  {this.state.pairAssetInfo}
+                <div>
+                  <div className="ui-pairInfo">
+                    <div style={{ color: '#0C5453', fontSize: '12px', textAlign: 'center', margin: '10px 0 0 0' }}>{T('当前资金池流动性总量')}</div>
+                    {this.state.pairAssetInfo}
+                  </div>
                 </div>
               )}
 
               <Button className="ui-swap-submit" type="primary" onClick={() => (this.state.bLiquidOp ? this.startAddLiquidity() : this.startSwapAsset())}>
-                <font size="3">{this.state.bLiquidOp ? T('添加资金池').toLocaleUpperCase() : T('兑换').toLocaleUpperCase()}</font>
+                <font size="3">{this.state.bLiquidOp ? T('添加流动性').toLocaleUpperCase() : T('兑换').toLocaleUpperCase()}</font>
               </Button>
             </div>
 
-            <div style={styles.lastLine}>
+            {/* <div style={styles.lastLine}>
               <Button text style={{ color: '#00c9a7' }} onClick={() => this.showAllPairs()}>
                 <span>{T('所有交易对')} &gt;</span>
               </Button>
@@ -1230,7 +1517,7 @@ export default class OexSwap extends Component {
               <Button text style={{ color: '#00c9a7' }} onClick={() => this.showMiningInfo()}>
                 <span>{T('挖矿信息')} &gt;</span>
               </Button>
-            </div>
+            </div> */}
           </div>
           {/* 
           <Divider direction='ver' style={{backgroundColor: '#272a2f'}}/>
@@ -1248,7 +1535,7 @@ export default class OexSwap extends Component {
                   <div>
                     <img src={this.state.pairAssetInfoData.firstAssetInfo.assetId === 0 ? oexTokenLogo : otherTokenLogo}></img>
                     <div className="ui-div1">{this.state.pairAssetInfoData.firstAssetInfo.symbol.toLocaleUpperCase()}</div>
-                    <div className="ui-div2 ui-ell2">{this.state.pairAssetInfoData.firstAssetInfo.assetName}</div>
+                    <div className="ui-div2 ui-ell2">{this.state.pairAssetInfoData.firstAssetInfo.name}</div>
                   </div>
                 </div>
                 <div className="ui-SwapDetail-symbol-join">+</div>
@@ -1256,7 +1543,7 @@ export default class OexSwap extends Component {
                   <div style={{ float: 'right' }}>
                     <img src={this.state.pairAssetInfoData.secondAssetInfo.assetId === 0 ? oexTokenLogo : otherTokenLogo}></img>
                     <div className="ui-div1">{this.state.pairAssetInfoData.secondAssetInfo.symbol.toLocaleUpperCase()}</div>
-                    <div className="ui-div2 ui-ell2">{this.state.pairAssetInfoData.secondAssetInfo.assetName}</div>
+                    <div className="ui-div2 ui-ell2">{this.state.pairAssetInfoData.secondAssetInfo.name}</div>
                   </div>
                 </div>
               </div>
@@ -1304,7 +1591,7 @@ export default class OexSwap extends Component {
                   {this.state.mySwapPoolDialogData.map((item) => {
                     if (item.firstAsset) {
                       return (
-                        <div className="ui-MySwapDetail-acc" key={item.key}>
+                        <div className="ui-MySwapDetail-acc" key={item.pairAddr}>
                           <div>
                             <span>
                               {item.firstAsset.symbol.toLocaleUpperCase()} / {item.secondAsset.symbol.toLocaleUpperCase()}
@@ -1316,7 +1603,7 @@ export default class OexSwap extends Component {
                           </div>
                           <div key={2}>
                             <span className="ui-primary">
-                              {item.bigRemoveNum} {T('个')}
+                            {T('您的LP')}:{item.bigRemoveNum.shiftedBy(-18).toString()} 
                             </span>
                             <div
                               onClick={() => this.outPoolDialogOpen(item)}
@@ -1343,17 +1630,25 @@ export default class OexSwap extends Component {
             <div className="ui-dialog-data">
               <div className="ui-MySwapDetail-BodyContent">
                 <div>
-                  <span style={{ fontSize: '12px', color: '#5E768B', fontWeight: '400' }}>{T('流动性/个').toLocaleUpperCase()}</span>
+                  <span style={{ fontSize: '12px', color: '#5E768B', fontWeight: '400' }}>{T('LP数量').toLocaleUpperCase()}</span>
                   <input max={this.state.bigRemoveNum} min={0} value={this.state.outPoolAmount} onChange={this.outPoolAmountChange.bind(this)}></input>
                 </div>
                 <div style={{ fontSize: '12px', color: '#5E768B', marginTop: '10px', textAlign: 'right' }}>
-                  {this.state.myOutPoolDialogData.firstAsset.symbol.toLocaleUpperCase()} / {this.state.myOutPoolDialogData.secondAsset.symbol.toLocaleUpperCase()}
+                  {this.state.removedAmount0.shiftedBy(this.state.myOutPoolDialogData.firstAsset.decimals * -1).toFixed(6)
+                  + ' ' +
+                  this.state.myOutPoolDialogData.firstAsset.symbol.toLocaleUpperCase()}
+                </div>
+                <div style={{ fontSize: '12px', color: '#5E768B', marginTop: '10px', textAlign: 'right' }}>
+                  {this.state.removedAmount1.shiftedBy(this.state.myOutPoolDialogData.secondAsset.decimals * -1).toFixed(6)
+                  + ' ' +
+                  this.state.myOutPoolDialogData.secondAsset.symbol.toLocaleUpperCase()}
                 </div>
                 <UiProgressControl
                   key={this.state.UiProgressControlKey}
                   style={{ marginTop: '26px' }}
                   value={this.state.outPoolValue}
-                  onUpdate={(newVal) => this.updateOutPoolValue(newVal)}></UiProgressControl>
+                  onUpdate={(newVal) => this.updateOutPoolValue(newVal)}>
+                </UiProgressControl>
                 <div className="ui-submit-danger" onClick={() => this.myOutPoolSubmit()} style={{ marginTop: '70px' }}>
                   {T('退出流动池').toLocaleUpperCase()}
                 </div>
@@ -1367,12 +1662,12 @@ export default class OexSwap extends Component {
         <UiDialog
           className="ui-SelectAsset"
           visible={this.state.assetSelectorDialogVisible}
-          title={[<Iconfont key={2} icon="asset" primary></Iconfont>, T('选择资产').toLocaleUpperCase()]}
+          title={[<Iconfont key={2} icon="asset" primary></Iconfont>, T('选择通证').toLocaleUpperCase()]}
           header={
             <div className="ui-dialog-search">
               <Input
                 autoFocus
-                placeholder={T('通过资产ID/资产全名搜索资产')}
+                placeholder={T('通过地址/名称搜索通证')}
                 innerBefore={<Icon type="search" size="xs" onClick={() => this.searchAsset()} />}
                 value={this.state.assetContent}
                 onChange={(v) => this.setState({ assetContent: v })}
@@ -1395,6 +1690,18 @@ export default class OexSwap extends Component {
           onCancel={() => this.setState({ minerInfoDialogVisible: false })}>
           <MinerInfo></MinerInfo>
         </UiDialog4>
+
+        <UiDialog
+          className="ui-TokenApprove"
+          visible={this.state.tokenApprovedDialogVisible}
+          title={[<Iconfont key={2} icon="asset" primary></Iconfont>, T('授权操作').toLocaleUpperCase() + '--' + this.state.curApprovedAssetInfo.symbol]}
+          onOk={() => this.state.nextStepFunc()}
+          onCancel={() => this.setState({ tokenApprovedDialogVisible: false })}>
+            <Row justify="center" align="center" style={{height: 150}}>
+              {T('点击确认进行代币授权操作，授权成功后方可进行后续操作')} 
+            </Row>
+          
+        </UiDialog>
 
         <Dialog
           style={{ width: '600px', padding: 0 }}
@@ -1506,8 +1813,8 @@ export default class OexSwap extends Component {
               <Table.Column title={T('发起账号')} dataIndex="actionInfo" width={140} cell={txInfoColume.accountName} />
               <Table.Column title={T('操作类型')} dataIndex="actionInfo" width={140} cell={TUP(txInfoColume.typeName)} />
               <Table.Column title={T('状态')} dataIndex="status" width={110} cell={txInfoColume.status} />
-              <Table.Column title={T('资产1')} dataIndex="actionInfo" width={110} cell={txInfoColume.processAssetInfo.bind(this, 0)} />
-              <Table.Column title={T('资产2')} dataIndex="actionInfo" width={110} cell={txInfoColume.processAssetInfo.bind(this, 1)} />
+              <Table.Column title={T('通证1')} dataIndex="actionInfo" width={110} cell={txInfoColume.processAssetInfo.bind(this, 0)} />
+              <Table.Column title={T('通证2')} dataIndex="actionInfo" width={110} cell={txInfoColume.processAssetInfo.bind(this, 1)} />
             </Table>
           </IceContainer>
         </UiDialog>
@@ -1545,7 +1852,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     height: '620px',
-    width: '394px',
+    width: '420px',
     backgroundColor: '#fff',
     borderRadius: '36px',
     marginTop: '-100px',

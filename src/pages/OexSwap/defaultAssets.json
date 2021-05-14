@@ -1,0 +1,108 @@
+{
+    "128": {
+      "routerContract": "0xF0D95c09EE991B52D1e804daCD0c5F10de800CDE",
+      "factoryContract": "0x03DcDba01F05591E6BCE33c3690B0e3BB8Df0f7f",
+      "assets": [
+        {
+          "name": "HT",
+          "symbol": "HT",
+          "assetid": "0",
+          "decimals": 18,
+          "logoAddr": "0x5545153CCFcA01fbd7Dd11C0b23ba694D9509A6F"
+        },
+        {
+          "name": "Wrapped HT",
+          "symbol": "WHT",
+          "decimals": 18,
+          "assetid": "0x5545153CCFcA01fbd7Dd11C0b23ba694D9509A6F",
+          "wrappedETH": true,
+          "middleToken": true
+        },
+        {
+          "name": "Heco-Peg HUSD Token",
+          "symbol": "HUSD",
+          "decimals": 8,
+          "assetid": "0x0298c2b32eaE4da002a15f36fdf7615BEa3DA047",
+          "middleToken": true
+        },
+        {
+          "name": "Heco-Peg USDTHECO Token",
+          "symbol": "USDT",
+          "decimals": 18,
+          "assetid": "0xa71EdC38d189767582C38A3145b5873052c3e47a",
+          "middleToken": true
+        },
+        {
+          "name": "Heco-Peg HBTC Token",
+          "symbol": "HBTC",
+          "decimals": 18,
+          "assetid": "0x66a79D23E58475D2738179Ca52cd0b41d73f0BEa"
+        },
+        {
+          "name": "Heco-Peg ETH Token",
+          "symbol": "ETH",
+          "decimals": 18,
+          "assetid": "0x64FF637fB478863B7468bc97D30a5bF3A428a1fD"
+        },
+        {
+          "name": "HNB",
+          "symbol": "HNB",
+          "decimals": 18,
+          "assetid": "0xff246F69fbd38Efc592734B98d7913bA8A8825Dd"
+        },
+        {
+          "name": "HDX",
+          "symbol": "HDX",
+          "decimals": 18,
+          "assetid": "0x8DD6CE59bebd015f6CF519f21aac19D12d68ceFC"
+        }
+      ]
+    },
+    "56": {
+      "routerContract": "0x....",
+      "factoryContract": "0x....",
+      "assets": [
+        {
+          "name": "BNB",
+          "symbol": "BNB",
+          "assetid": "0",
+          "decimals": 18,
+          "logoAddr": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
+        },
+        {
+          "name": "Wrapped BNB",
+          "symbol": "WBNB",
+          "decimals": 18,
+          "assetid": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+          "wrappedETH": true,
+          "middleToken": true
+        },
+        {
+          "name": "Binance-Peg BUSD Token",
+          "symbol": "BUSD",
+          "decimals": 18,
+          "assetid": "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
+          "middleToken": true
+        },
+        {
+          "name": "Binance-Peg BUSD-T",
+          "symbol": "USDT",
+          "decimals": 18,
+          "assetid": "0x55d398326f99059fF775485246999027B3197955",
+          "middleToken": true
+        },
+        {
+          "name": "Binance-Peg BTCB Token",
+          "symbol": "BTCB",
+          "decimals": 18,
+          "assetid": "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c"
+        },
+        {
+          "name": "Binance-Peg Ethereum Token",
+          "symbol": "ETH",
+          "decimals": 18,
+          "assetid": "0x2170Ed0880ac9A755fd29B2688956BD959F933F8"
+        }
+      ]
+    }
+  }

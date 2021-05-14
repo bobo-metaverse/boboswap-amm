@@ -1,8 +1,14 @@
 import React from 'react';
 import { Notification } from '@alifd/next';
 import BigNumber from 'bignumber.js';
+import eventProxy from './eventProxy';
 
-export const OEXChainNetwork = 'https://oexchain.com/';
+export var broswerURL = 'https://bscscan.com/';
+
+// 每次factory合约发生变化，都需要发送此事件以更新factory合约地址
+eventProxy.on('updateBroswerURL', url => {
+  broswerURL = url;
+});
 
 export function displayShortAddr(addr) {
   const simpleAddr = addr.substr(0, 12) + '...';
@@ -47,13 +53,13 @@ export function displayErrorInfo(error) {
   });
 }
 
-export function displayNotice(tips) {
+export function displayNotice(tips, duration1) {
   Notification.config({ placement: 'br' });
   Notification.open({
     title: '',
     content: tips,
     type: 'notice',
-    duration: 10000,
+    duration: duration1 != null ? duration1 : 10000,
   });
 }
 
@@ -61,16 +67,17 @@ const txNotificationKeyMap = {};
 
 export function displayTxInfo(txId) {
   const content = (
-    <a href={OEXChainNetwork + '#/Transaction?' + txId} target="_blank">
-      交易已发送成功，点击此处可跳转到浏览器查看详情.
+    <a href={broswerURL + '/tx/' + txId} target="_blank">
+      点击此处可跳转到浏览器查看详情.
     </a>
   );
   Notification.config({ placement: 'br' });
   const key = Notification.open({
-    title: '交易发送结果',
+    title: '交易已发送，正在打包',
     content,
     type: 'success',
     duration: 0,
+    icon: 'loading',
     onClick: () => {
       Notification.close(key);
       txNotificationKeyMap[txId] = null;
@@ -101,7 +108,7 @@ export function displayReceiptFailInfo(txId) {
     Notification.close(txNotificationKeyMap[txId]);
   }
   const content = (
-    <a href={OEXChainNetwork + '#/Transaction?' + txId} target="_blank">
+    <a href={broswerURL + '/tx/' + txId} target="_blank">
       交易（hash= ' + {displayShortAddr(txId)} + '）执行失败，点击跳转到浏览器查看详情.'
     </a>
   );
@@ -122,7 +129,7 @@ export function displayReceiptUnknownInfo(txId) {
     Notification.close(txNotificationKeyMap[txId]);
   }
   const content = (
-    <a href={OEXChainNetwork + '#/Transaction?' + txId} target="_blank">
+    <a href={broswerURL + '/tx/' + txId} target="_blank">
       未查询到交易（txHash= ' + {displayShortAddr(txId)} + '）执行结果，点击跳转到浏览器查看详情.'
     </a>
   );

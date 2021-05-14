@@ -27,7 +27,7 @@ export default class Logo extends PureComponent {
       <Link to="/" className="logo">
         <Iconfont icon="oex" primary></Iconfont>
         <div to="/" className="logo-text">
-          OEX Swap
+          Honest Swap
         </div>
       </Link>
     );

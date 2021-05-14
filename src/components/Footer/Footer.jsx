@@ -18,28 +18,28 @@ export default class Footer extends PureComponent {
         <div className="ui-layout-footer-body">
           <div className="ui-footer">
             <a href="/" style={{ fontSize: '16px', color: '#5E768B', fontWeight: 'bold' }}>
-              OEX Swap
+            Defender Swap
             </a>
-            <a style={{ right: 56 * 3 + 'px' }} href="http://t.me/oexfund">
+            <a style={{ right: 56 * 3 + 'px' }} href="http://t.me/">
               <img src={PNG_tzh} />
             </a>
-            <a style={{ right: 56 * 2 + 'px' }} href="http://t.me/oexfunder">
+            <a style={{ right: 56 * 2 + 'px' }} href="http://t.me/">
               <img src={PNG_ten} />
             </a>
-            <a style={{ right: 56 * 1 + 'px' }} href="https://www.facebook.com/fund.oex.7">
+            <a style={{ right: 56 * 1 + 'px' }} href="https://www.facebook.com/">
               <img src={PNG_f} />
             </a>
-            <a style={{ right: '10px' }} href="https://twitter.com/Oex_team">
+            <a style={{ right: '10px' }} href="https://twitter.com/">
               <img src={PNG_t} />
             </a>
           </div>
         </div>
         <div className="uilayout-copyright">
-          <span>© 2019 Theme designed by oex.com</span>
+          <span>© 2019 Theme designed by defender.com</span>
           <span className="line">|</span>
-          <span>冀ICP备2020025490号</span>
+          <span>备案号:xxx-xxx</span>
           <span className="line">|</span>
-          <span>oexfund@gmail.com</span>
+          <span>defender@gmail.com</span>
         </div>
       </Layout.Footer>
     );

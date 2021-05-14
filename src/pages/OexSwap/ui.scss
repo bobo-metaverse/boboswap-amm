@@ -47,9 +47,10 @@
   line-height: 40px !important;
   background-color: #00c9a7 !important;
   border-radius: 100px !important;
-  position: absolute;
+  //position: absolute;
   bottom: 25px;
   box-shadow: 0 0 4px 0 rgba(#00c9a7, 0.5);
+  margin-top: 38px !important;
 }
 // 提供流动性
 .ui-swap-bLiquidOp {
@@ -199,14 +200,14 @@
 
 .ui-pairInfo {
   width: 342px;
-  height: 78px;
+  height: 60px;
   background: #00c9a7;
   border: 3px solid #affcea;
   border-radius: 10px;
   margin-top: 14px;
 }
 .ui-my-pairInfo {
-  width: 340px;
+  width: 360px;
   height: 50px;
   background: #f2f3f4;
   border-radius: 10px;

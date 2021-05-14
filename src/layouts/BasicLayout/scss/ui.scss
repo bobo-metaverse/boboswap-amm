@@ -646,6 +646,7 @@ svg path:nth-child(1) {
     }
   }
 }
+
 .ui-MinerInfo,
 .ui-SwapMiner,
 .ui-HireMiner {
@@ -654,6 +655,14 @@ svg path:nth-child(1) {
     width: 810px;
   }
 }
+
+.ui-TokenApprove {
+  width: 400px;
+  .ui-dialog-body {
+    width: 400px;
+  }
+}
+
 .ui-assetInfo {
   height: 226px;
   width: 270px;
@@ -672,7 +681,7 @@ svg path:nth-child(1) {
     position: absolute;
     top: 10px;
     right: 10px;
-    color: #c9cace;
+    color: #00c9a7;
     font-size: 12px;
   }
   > img {
@@ -720,6 +729,16 @@ svg path:nth-child(1) {
     overflow: hidden;
     cursor: pointer;
     text-align: center;
+  }
+  .ui-logo {
+    background-color: #00c9a7;
+    width: 40px; 
+    height: 40px; 
+    border-radius: 20px;
+    border: none;
+    margin-top: 46px;
+    margin-left: 30px;
+    color: #fff;
   }
 
   &.ui-select {

@@ -22,6 +22,7 @@ import * as utils from '../../utils/utils';
 import * as constant from '../../utils/constant';
 import { T, setLang } from '../../utils/lang';
 import eventProxy from '../../utils/eventProxy';
+import Web3 from 'web3';
 import BigNumber from 'bignumber.js';
 import './scss/ui.scss';
 import { Iconfont } from '../Ui/iconfont';
@@ -54,6 +55,7 @@ export default class Header extends PureComponent {
     if (index > -1) upAccountId = parseInt(window.location.href.substr(index + 4));
 
     this.state = {
+      web3: null,
       spreadContractName: 'spreadtest002',
       minerContractName: 'oexminertest015',
       upAccountId,
@@ -66,6 +68,8 @@ export default class Header extends PureComponent {
       swapMinerDialogVisible: false,
       hireMinerDialogVisible: false,
 
+      walletBtnInfo: '连接钱包',
+      ethAccount: '',
       account: account,
       accountName: account != null ? account.accountName : '',
       privateKey: '',
@@ -91,35 +95,13 @@ export default class Header extends PureComponent {
     setLang(this.state.defaultLang);
   }
   componentDidMount = async () => {
-    let nodeInfo = cookie.load('nodeInfo');
-    await oexchain.utils.setProvider(nodeInfo);
-
-    oexchain.oex.getChainConfig().then((chainConfig) => {
-      this.setState({ chainId: chainConfig.chainId });
-      oexchain.oex.setChainConfig(chainConfig).then(() => {
-        if (this.state.account != null) {
-          this.getTotalReward(this.state.account.accountID).then((totalReward) => (this.state.spreadInfo.totalReward = totalReward));
-          this.getDownAccountsNumber(this.state.account.accountID).then((number) => {
-            this.state.spreadInfo.downAccountNum = number;
-            for (var i = 0; i < number; i++) {
-              this.getDownAccount(this.state.account.accountID, i).then((accountId) => {
-                oexchain.account.getAccountById(accountId).then((account) => {
-                  if (account != null) {
-                    this.state.spreadInfo.downAccountNames.push(account.accountName);
-                  }
-                });
-              });
-            }
-          });
-        }
-      });
-    });
     eventProxy.on('importAccountInfo', () => {
       this.setState({ accountConfigVisible: true });
     });
     if (this.state.accountName == '') {
       this.setState({ accountConfigVisible: true });
     }
+    this.initMetamaskNetwork();
   };
 
   componentWillReceiveProps(nextProps) {
@@ -269,11 +251,40 @@ export default class Header extends PureComponent {
     });
   };
 
+  initMetamaskNetwork = async () => {
+    if (!window.ethereum && !window.web3) { //用来判断你是否安装了metamask
+      Feedback.toast.error('请安装MetaMask');
+    } else {
+      if (window.ethereum) {
+        try {
+          // 请求用户授权
+          await window.ethereum.enable();
+          if (window.ethereum.networkVersion != '56' && window.ethereum.networkVersion != '128') {
+            Feedback.toast.error("请将MetaMask连接到BSC或Heco网络，否则您无法正常使用本网站");
+          } else {
+            this.state.chainId = window.ethereum.networkVersion;
+            this.state.web3 = new Web3(window.ethereum);
+            this.state.web3.eth.getAccounts().then(accounts => {
+              const simpleAccount = accounts[0].substr(0, 6) + '...' + accounts[0].substr(accounts[0].length - 3);
+              eventProxy.trigger('web3Inited', {web3: this.state.web3, chainId: this.state.chainId, accountAddr: accounts[0]});
+              this.setState({ethAccount: accounts[0], walletBtnInfo: simpleAccount});
+            });
+            ethereum.on('chainChanged', (chainId) => {
+              history.go(0);
+            });
+            //history.go(0);
+          }
+        } catch (error) {
+          // 用户不授权时
+          Feedback.toast.error("MetaMask授权失败，会导致您无法正常使用本网站");
+          return;
+        }        
+      }     
+    }
+  }
+
   manageAccount = () => {
-    this.setState({
-      accountConfigVisible: true,
-    });
-    //history.push('/AccountManager');
+    this.initMetamaskNetwork();    
   };
 
   copyValue = (value) => {
@@ -295,7 +306,7 @@ export default class Header extends PureComponent {
     const accountBtnTrigger = (
       <Button text type="normal" style={{ color: '#808080', marginRight: '30px' }} onClick={this.manageAccount.bind(this)}>
         <Iconfont icon="account" style={{ marginRight: '8px', fontSize: '16px' }} primary></Iconfont>
-        {T('账号设置')}
+        {T(this.state.walletBtnInfo)}
       </Button>
     );
     const { isMobile, theme, width, className, style, location } = this.props;
@@ -346,21 +357,21 @@ export default class Header extends PureComponent {
         </div> */}
 
         <div className="ui-layout-header-menu">
-          <div className="ui-header-btn" style={{ marginRight: '30px' }} onClick={() => this.showMiningInfo()}>
+          {/* <div className="ui-header-btn" style={{ marginRight: '30px' }} onClick={() => this.showMiningInfo()}>
             <Iconfont icon="wa"></Iconfont>
             <span>{T('挖矿信息')}</span>
             <Iconfont icon="hot"></Iconfont>
-          </div>
+          </div> */}
           {/* <div className="ui-header-btn" style={{ marginRight: '114px' }} onClick={() => this.showMiningInfo()}>
             <Iconfont icon="wa"></Iconfont>
             <span>雇佣挖矿</span>
             <Iconfont icon="hot"></Iconfont>
           </div> */}
-          <Balloon trigger={defaultTrigger} closable={false} style={{ color: '#5e768b' }}>
+          {/* <Balloon trigger={defaultTrigger} closable={false} style={{ color: '#5e768b' }}>
             {T('当前连接的节点')}:{this.state.nodeInfo}, ChainId:{this.state.chainId}
-          </Balloon>
+          </Balloon> */}
           <Balloon trigger={accountBtnTrigger} closable={false} style={{ color: '#5e768b' }}>
-            {T('当前账号')}:{this.state.accountName == '' ? '尚未导入' : this.state.accountName}
+            {T('当前网络')}:{this.state.chainId == 56 ? 'BSC' : (this.state.chainId == 128 ? 'Heco' : '未知')}
           </Balloon>
           {/* <Button text type="normal" style={{ color: '#00C9A7', marginRight: '50px' }} onClick={() => this.setState({ spreadInfoDialogVisible: true })}>
             <Iconfont icon="gift" style={{ marginRight: '8px', fontSize: '16px' }} primary></Iconfont>
@@ -370,11 +381,11 @@ export default class Header extends PureComponent {
             {this.state.curLang}
           </Button> */}
 
-          {this.state.defaultLang == null || this.state.defaultLang == 'ch' ? (
+          {/* {this.state.defaultLang == null || this.state.defaultLang == 'ch' ? (
             <img src={PNG_lang_en} style={{ position: 'relative', top: '3px', cursor: 'pointer' }} onClick={this.onChangeLanguage.bind(this)}></img>
           ) : (
             <img src={PNG_lang_ch} style={{ position: 'relative', top: '3px', cursor: 'pointer' }} onClick={this.onChangeLanguage.bind(this)}></img>
-          )}
+          )} */}
 
           <UiDialog4
             className="ui-SwapMiner"
