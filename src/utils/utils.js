@@ -631,7 +631,7 @@ function isValidAddress(address) {
 
 
 //判断链接是否存在
-function validateImage(pathImg) {
+function validateImage1(pathImg) {
 	var ImgObj = new Image();
 	ImgObj.src = pathImg;
 	if(ImgObj.fileSize > 0 || (ImgObj.width > 0 && ImgObj.height > 0)) {
@@ -639,6 +639,25 @@ function validateImage(pathImg) {
 	} else {
 		return false;
   }
+}
+
+function validateImage(url)
+{    
+    var xmlHttp ;
+    if (window.ActiveXObject)
+     {
+      xmlHttp = new ActiveXObject("Microsoft.XMLHTTP");
+     }
+     else if (window.XMLHttpRequest)
+     {
+      xmlHttp = new XMLHttpRequest();
+     } 
+    xmlHttp.open("Get",url,false);
+    xmlHttp.send();
+    if(xmlHttp.status==404)
+      return false;
+    else
+      return true;
 }
 
 export const sleep = (time) => new Promise((resolve) => setTimeout(resolve, time));

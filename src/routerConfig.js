@@ -6,14 +6,14 @@ import { getRouterData } from './utils/utils';
 import { asideMenuConfig } from './menuConfig';
 
 import BasicLayout from './layouts/BasicLayout';
-import OexSwap from './pages/OexSwap';
+import Swap from './pages/swap';
 
 
 const routerConfig = [
   {
-    path: '/oexSwap',
+    path: '/swap',
     layout: BasicLayout,
-    component: OexSwap,
+    component: Swap,
   }
 ];
 

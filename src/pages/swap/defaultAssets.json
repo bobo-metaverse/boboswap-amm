@@ -59,8 +59,8 @@
       ]
     },
     "56": {
-      "routerContract": "0x....",
-      "factoryContract": "0x....",
+      "routerContract": "0xB5F69e63d480b11e5b77a09FAE26FE12f86bd78e",
+      "factoryContract": "0x99E1F14C7404A83E30B7db95dbCA87BB81A04be5",
       "assets": [
         {
           "name": "BNB",

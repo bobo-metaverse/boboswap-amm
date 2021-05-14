@@ -1,8 +1,9 @@
 import React, { PureComponent } from 'react';
 import { Link } from 'react-router-dom';
-import * as oexchain from 'oex-web3';
 import { T } from '../../utils/lang';
 import { Iconfont } from '../Ui/iconfont';
+
+const logo_img = require('./images/logo_s.png');
 
 export default class Logo extends PureComponent {
   constructor(props) {
@@ -12,23 +13,17 @@ export default class Logo extends PureComponent {
     };
   }
   componentDidMount = () => {
-    oexchain.oex.getChainConfig().then((chainConfig) => {
-      let networkType = T('私网');
-      if (chainConfig.chainId == 1) {
-        networkType = T('主网');
-      } else if (chainConfig.chainId >= 100 && chainConfig.chainId <= 200) {
-        networkType = T('测试网');
-      }
-      this.setState({ networkType });
-    });
+    
   };
   render() {
     return (
       <Link to="/" className="logo">
-        <Iconfont icon="oex" primary></Iconfont>
+        {/* <Iconfont icon="oex" primary></Iconfont>*/}
         <div to="/" className="logo-text">
-          Honest Swap
-        </div>
+          <img src={logo_img} style={{ width: '40px', height: '40px' }}></img>
+          DefenderSwap
+        </div> 
+        
       </Link>
     );
   }

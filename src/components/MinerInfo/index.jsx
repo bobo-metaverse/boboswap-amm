@@ -16,7 +16,7 @@ import { sleep } from '../../utils/notification';
 import { getAccountInfoById } from '../../utils/oexSDK';
 
 const zero = new BigNumber(0);
-const otherTokenLogo = require('../../pages/OexSwap/images/default-logo.png');
+const otherTokenLogo = require('../../pages/swap/images/default-logo.png');
 
 // upAccount2Accout2RewardMap
 

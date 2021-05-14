@@ -42,7 +42,7 @@ class AppDataClass {
   };
 
   constructor() {
-    this.mounted = Promise.all([this._updateCurrentBlock(), this._updateEpoch()]);
+    //this.mounted = Promise.all([this._updateCurrentBlock(), this._updateEpoch()]);
   }
 
   async awaitOex() {

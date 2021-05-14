@@ -6,7 +6,7 @@ import { T } from './utils/lang'
 const headerMenuConfig = [
   {
     name: T(''),
-    path: '/oexSwap',
+    path: '/swap',
     icon: 'code',
   }
 ];

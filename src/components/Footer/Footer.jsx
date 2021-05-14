@@ -9,6 +9,7 @@ const PNG_logo = require('./images/logo.png');
 const PNG_ten = require('./images/t.en.png');
 const PNG_tzh = require('./images/t.zh.png');
 const PNG_t = require('./images/t.png');
+const logo_img = require('./images/logo_s.png');
 
 export default class Footer extends PureComponent {
   render() {
@@ -18,7 +19,7 @@ export default class Footer extends PureComponent {
         <div className="ui-layout-footer-body">
           <div className="ui-footer">
             <a href="/" style={{ fontSize: '16px', color: '#5E768B', fontWeight: 'bold' }}>
-            Defender Swap
+            DefenderSwap
             </a>
             <a style={{ right: 56 * 3 + 'px' }} href="http://t.me/">
               <img src={PNG_tzh} />

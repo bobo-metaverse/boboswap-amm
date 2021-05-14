@@ -37,6 +37,7 @@ export const history = createHashHistory();
 const keyMap = { dashboard: '0', Block: '1', Transaction: '2', assetOperator: '3', contractDev: '4', producerList: '5' };
 const PNG_lang_en = require('./images/en.png');
 const PNG_lang_ch = require('./images/ch.png');
+const logo_img = require('./images/logo_s.png');
 
 export default class Header extends PureComponent {
   constructor(props) {
@@ -56,8 +57,6 @@ export default class Header extends PureComponent {
 
     this.state = {
       web3: null,
-      spreadContractName: 'spreadtest002',
-      minerContractName: 'oexminertest015',
       upAccountId,
       txInfoVisible: false,
       current: keyMap[props.location.pathname.substr(1)],
@@ -107,39 +106,6 @@ export default class Header extends PureComponent {
   componentWillReceiveProps(nextProps) {
     this.setState({ current: keyMap[nextProps.location.pathname.substr(1)] });
   }
-
-  getTotalReward = async (accountId) => {
-    let payloadInfo = { funcName: 'accountSpreadRewardMap', types: ['address'], values: [accountId] }; // types和values即合约方法的参数类型和值
-    const totalReward = await oexchain.action.readContract(this.state.accountName, this.state.minerContractName, payloadInfo, 'latest');
-    return new BigNumber(totalReward).shiftedBy(-18).toNumber();
-  };
-
-  getUpAccount = async (accountId) => {
-    let payloadInfo = { funcName: 'getUpAccount', types: ['address'], values: [accountId] }; // types和values即合约方法的参数类型和值
-    const upAccountId = await oexchain.action.readContract(this.state.accountName, this.state.spreadContractName, payloadInfo, 'latest');
-    return upAccountId == '0x' ? 0 : new BigNumber(upAccountId).toNumber();
-  };
-
-  getDownAccountsNumber = async (accountId) => {
-    let payloadInfo = { funcName: 'getDownAccountsNumber', types: ['address'], values: [accountId] }; // types和values即合约方法的参数类型和值
-    const number = await oexchain.action.readContract(this.state.accountName, this.state.spreadContractName, payloadInfo, 'latest');
-    return new BigNumber(number).toNumber();
-  };
-
-  getDownAccount = async (accountId, index) => {
-    let payloadInfo = { funcName: 'getDownAccount', types: ['address', 'uint'], values: [accountId, index] }; // types和values即合约方法的参数类型和值
-    const number = await oexchain.action.readContract(this.state.accountName, this.state.spreadContractName, payloadInfo, 'latest');
-    return new BigNumber(number).toNumber();
-  };
-
-  registerUpAccount = async (gasInfo, privateKey) => {
-    const { accountName, contractName } = this.state;
-    let actionInfo = { accountName, toAccountName: this.state.spreadContractName, assetId: 0, amount: new BigNumber(0), remark: '' };
-
-    let payloadInfo = { funcName: 'registerUpAccount', types: ['address'], values: ['0x' + new BigNumber(this.state.upAccountId).toString(16)] };
-
-    return oexchain.action.executeContract(actionInfo, gasInfo, payloadInfo, privateKey);
-  };
 
   openSetDialog = () => {
     this.setState({ nodeConfigVisible: true });
@@ -259,6 +225,12 @@ export default class Header extends PureComponent {
         try {
           // 请求用户授权
           await window.ethereum.enable();
+          ethereum.on('chainChanged', (chainId) => {
+            history.go(0);
+          });
+          ethereum.on('accountsChanged', (chainId) => {
+            history.go(0);
+          });
           if (window.ethereum.networkVersion != '56' && window.ethereum.networkVersion != '128') {
             Feedback.toast.error("请将MetaMask连接到BSC或Heco网络，否则您无法正常使用本网站");
           } else {
@@ -268,9 +240,6 @@ export default class Header extends PureComponent {
               const simpleAccount = accounts[0].substr(0, 6) + '...' + accounts[0].substr(accounts[0].length - 3);
               eventProxy.trigger('web3Inited', {web3: this.state.web3, chainId: this.state.chainId, accountAddr: accounts[0]});
               this.setState({ethAccount: accounts[0], walletBtnInfo: simpleAccount});
-            });
-            ethereum.on('chainChanged', (chainId) => {
-              history.go(0);
             });
             //history.go(0);
           }
@@ -315,47 +284,6 @@ export default class Header extends PureComponent {
     return (
       <header theme={theme} className={cx('ui-layout-header')}>
         <Logo />
-        {/* <div className="ui-layout-header-menu" style={{ display: 'flex' }}>
-          {headerMenuConfig && headerMenuConfig.length > 0 ? (
-            <StyledMenu theme="light" onClick={this.handleClick} selectedKeys={[this.state.current]} style={{ fontSize: '14px' }} mode="horizontal">
-              {headerMenuConfig.map((nav, idx) => {
-                let subMenu = null;
-                const linkProps = {};
-                if (nav.children) {
-                  subMenu = { items: [] };
-                  subMenu.label = T(nav.name);
-                  nav.children.map((item) => {
-                    if (item.newWindow) {
-                      subMenu.items.push({ value: item.name, href: item.path, target: '_blank' });
-                    } else if (item.external) {
-                      subMenu.items.push({ value: item.name, href: item.path });
-                    } else {
-                      subMenu.items.push({ value: item.name, to: item.path });
-                    }
-                  });
-                } else if (nav.newWindow) {
-                  linkProps.href = nav.path;
-                  linkProps.target = '_blank';
-                } else if (nav.external) {
-                  linkProps.href = nav.path;
-                } else {
-                  linkProps.to = nav.path;
-                }
-                if (subMenu !== null) {
-                  return (
-                    <SubMenu title={<span>{subMenu.label}</span>} key={idx}>
-                      {subMenu.items.map((item, i) => (
-                        <MenuItem key={idx + '-' + i}>{item.to ? <Link to={item.to}>{item.value}</Link> : <a {...item}>{item.value}</a>}</MenuItem>
-                      ))}
-                    </SubMenu>
-                  );
-                }
-                return <MenuItem key={idx}>{linkProps.to ? <Link {...linkProps}>{!isMobile ? T(nav.name) : null}</Link> : <a {...linkProps}>{!isMobile ? T(nav.name) : null}</a>}</MenuItem>;
-              })}
-            </StyledMenu>
-          ) : null}
-        </div> */}
-
         <div className="ui-layout-header-menu">
           {/* <div className="ui-header-btn" style={{ marginRight: '30px' }} onClick={() => this.showMiningInfo()}>
             <Iconfont icon="wa"></Iconfont>
