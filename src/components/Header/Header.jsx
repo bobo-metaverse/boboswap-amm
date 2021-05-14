@@ -95,12 +95,12 @@ export default class Header extends PureComponent {
     setLang(this.state.defaultLang);
   }
   componentDidMount = async () => {
-    eventProxy.on('importAccountInfo', () => {
-      this.setState({ accountConfigVisible: true });
-    });
-    if (this.state.accountName == '') {
-      this.setState({ accountConfigVisible: true });
-    }
+    // eventProxy.on('importAccountInfo', () => {
+    //   this.setState({ accountConfigVisible: true });
+    // });
+    // if (this.state.accountName == '') {
+    //   this.setState({ accountConfigVisible: true });
+    // }
     this.initMetamaskNetwork();
   };
 
