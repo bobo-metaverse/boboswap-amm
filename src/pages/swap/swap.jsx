@@ -121,6 +121,13 @@ export default class Swap extends Component {
   componentDidMount = async () => {
     eventProxy.on('web3Inited', web3Info => {
       this.state.web3 = web3Info.web3;
+      const usedPairsInfo = localStorage.getItem('usedPairsInfo');
+      if (usedPairsInfo == null) {
+        this.state.usedPairsInfo[web3Info.chainId] = {};
+      } else {
+        this.state.usedPairsInfo = JSON.parse(usedPairsInfo);
+      }
+      
       this.setState({chainId: web3Info.chainId, accountAddr: web3Info.accountAddr});
       this.getDefaultAssets();
       eventProxy.trigger("updateBroswerURL", this.state.broswerInfo[web3Info.chainId]);
@@ -128,8 +135,6 @@ export default class Swap extends Component {
     eventProxy.on('txStatus', txStatus => {
       this.state.txStatus = txStatus;
     });
-
-    this.state.usedPairsInfo = JSON.parse(localStorage.getItem('usedPairsInfo') || {});
 
     this.state.timer = setInterval(this.updatePool.bind(this), 5000);
   };
@@ -168,7 +173,7 @@ export default class Swap extends Component {
     if (!this.state.toInfo) return;
     this.updateBaseInfo(this.state.fromInfo, this.state.toInfo);
     this.updateToValue();
-    this.updateUserInfo();
+    //this.updateUserInfo();
   }
   
   getPairByAddr = async (pairAddr) => {
@@ -419,23 +424,25 @@ export default class Swap extends Component {
   }
 
   updateBaseInfo = async (fromInfo, toInfo) => {
+    const { usedPairsInfo, chainId, accountAddr, feeRate, WETH } = this.state;
     if (fromInfo.selectAssetInfo != null && toInfo.selectAssetInfo != null) {
-      const fromAssetId = fromInfo.selectAssetInfo.assetid == '0' ? this.state.WETH.assetid : fromInfo.selectAssetInfo.assetid;
-      const toAssetId = toInfo.selectAssetInfo.assetid == '0' ? this.state.WETH.assetid : toInfo.selectAssetInfo.assetid;
+      const fromAssetId = fromInfo.selectAssetInfo.assetid == '0' ? WETH.assetid : fromInfo.selectAssetInfo.assetid;
+      const toAssetId = toInfo.selectAssetInfo.assetid == '0' ? WETH.assetid : toInfo.selectAssetInfo.assetid;
       //const path = await this.findBestSwapPath(new BigNumber(1).shiftedBy(18), fromAssetId, toAssetId);
       const curPairInfo = await this.getPairByAssetId(fromAssetId, toAssetId);
       if (curPairInfo.exist) {
-        if (this.state.usedPairsInfo[curPairInfo.pairAddr] != true) {
-          this.state.usedPairsInfo[curPairInfo.pairAddr] = {firstAsset: (fromInfo.selectAssetInfo.assetid == '0' ? this.state.WETH : fromInfo.selectAssetInfo), 
-                                                            secondAsset: (toInfo.selectAssetInfo.assetid == '0' ? this.state.WETH : toInfo.selectAssetInfo)};
-          localStorage.setItem('usedPairsInfo', JSON.stringify(this.state.usedPairsInfo));
+        if (usedPairsInfo[chainId][curPairInfo.pairAddr] == null) {
+          usedPairsInfo[chainId][curPairInfo.pairAddr] = {
+                                                            firstAsset: (fromInfo.selectAssetInfo.assetid == '0' ? WETH : fromInfo.selectAssetInfo), 
+                                                            secondAsset: (toInfo.selectAssetInfo.assetid == '0' ? WETH : toInfo.selectAssetInfo)};
+          localStorage.setItem('usedPairsInfo', JSON.stringify(usedPairsInfo));
         }
         const totalLiquid = await ERC20Util.totalSupply(curPairInfo.pairAddr);
-        const userLiquid = await ERC20Util.getBalance(curPairInfo.pairAddr, this.state.accountAddr);
+        const userLiquid = await ERC20Util.getBalance(curPairInfo.pairAddr, accountAddr);
         curPairInfo.totalLiquid = totalLiquid.multipliedBy(100);
         curPairInfo.userLiquid = userLiquid.multipliedBy(100);
         curPairInfo.myPercent = userLiquid.dividedBy(totalLiquid).multipliedBy(100).toFixed(2);
-        curPairInfo.feeAmount = new BigNumber(fromInfo.value).multipliedBy(this.state.feeRate).shiftedBy(-3).toFixed(6).toString().replace(/(?:\.0*|(\.\d+?)0+)$/,'$1');
+        curPairInfo.feeAmount = new BigNumber(fromInfo.value).multipliedBy(feeRate).shiftedBy(-3).toFixed(6).toString().replace(/(?:\.0*|(\.\d+?)0+)$/,'$1');
         curPairInfo.minReceivedAmount = 0;
 
         const pairInfo = await this.getPairByAddr(curPairInfo.pairAddr);
@@ -464,7 +471,7 @@ export default class Swap extends Component {
         this.setPairAssetInfo(firstAssetAmount, firstAssetInfo, secondAssetAmount, secondAssetInfo);
       } else {
         this.setPairAssetInfo(0, fromInfo.selectAssetInfo, 0, toInfo.selectAssetInfo);
-        Notification.displayWarningInfo('交易路径不存在，无法交易');
+        // Notification.displayWarningInfo('交易路径不存在，无法交易');
       }
       this.setState({ curPairInfo });
     }
@@ -782,8 +789,9 @@ export default class Swap extends Component {
     const mySwapPoolDialogData = [];
     this.state.mySwapPoolDialogData = [];
     this.setState({ mySwapPoolDialogData: [] });
-    for (var pairAddr in this.state.usedPairsInfo) {
-      const usedPair = this.state.usedPairsInfo[pairAddr];
+    console.log(this.state.usedPairsInfo)
+    for (var pairAddr in this.state.usedPairsInfo[this.state.chainId]) {
+      const usedPair = this.state.usedPairsInfo[this.state.chainId][pairAddr];
       console.log(pairAddr, usedPair)
       const data = {
         pairAddr,
@@ -807,6 +815,7 @@ export default class Swap extends Component {
         data.firstAssetReserve = new BigNumber(reserves.reserve0).multipliedBy(userLiquid).dividedBy(totalLiquid);
         data.secondAssetReserve = new BigNumber(reserves.reserve1).multipliedBy(userLiquid).dividedBy(totalLiquid);
         mySwapPoolDialogData.push(data);
+        console.log(data)
         this.setState({ mySwapPoolDialogData });
       }
     }
