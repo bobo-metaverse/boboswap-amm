@@ -11,6 +11,7 @@ import { connect } from 'react-redux';
 import { compose } from 'redux';
 
 import cookie from 'react-cookies';
+import * as utils from '../../utils/utils';
 import { setLang, T } from '../../utils/lang';
 import injectReducer from '../../utils/injectReducer';
 import Authorized from './../../utils/Authorized';
@@ -239,7 +240,9 @@ class BasicLayout extends Component {
             </Switch>
           </Layout.Main>
         </Layout.Section>
-        <Footer />
+        {
+          utils.isMobile() ? '' : <Footer />
+        }
       </Layout>
     );
   }

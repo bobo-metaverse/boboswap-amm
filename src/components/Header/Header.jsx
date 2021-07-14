@@ -285,35 +285,14 @@ export default class Header extends PureComponent {
       <header theme={theme} className={cx('ui-layout-header')}>
         <Logo />
         <div className="ui-layout-header-menu">
-          {/* <div className="ui-header-btn" style={{ marginRight: '30px' }} onClick={() => this.showMiningInfo()}>
-            <Iconfont icon="wa"></Iconfont>
-            <span>{T('挖矿信息')}</span>
-            <Iconfont icon="hot"></Iconfont>
-          </div> */}
-          {/* <div className="ui-header-btn" style={{ marginRight: '114px' }} onClick={() => this.showMiningInfo()}>
-            <Iconfont icon="wa"></Iconfont>
-            <span>雇佣挖矿</span>
-            <Iconfont icon="hot"></Iconfont>
-          </div> */}
-          {/* <Balloon trigger={defaultTrigger} closable={false} style={{ color: '#5e768b' }}>
-            {T('当前连接的节点')}:{this.state.nodeInfo}, ChainId:{this.state.chainId}
-          </Balloon> */}
-          <Balloon trigger={accountBtnTrigger} closable={false} style={{ color: '#5e768b' }}>
+          {/* <Balloon trigger={accountBtnTrigger} closable={false} style={{ color: '#5e768b' }}>
             {T('当前网络')}:{this.state.chainId == 56 ? 'BSC' : (this.state.chainId == 128 ? 'Heco' : '未知')}
-          </Balloon>
-          {/* <Button text type="normal" style={{ color: '#00C9A7', marginRight: '50px' }} onClick={() => this.setState({ spreadInfoDialogVisible: true })}>
-            <Iconfont icon="gift" style={{ marginRight: '8px', fontSize: '16px' }} primary></Iconfont>
-            {T('邀请奖励')}
-          </Button> */}
-          {/* <Button text type="normal" style={{ color: '#808080', marginLeft: '30px' }} onClick={this.onChangeLanguage.bind(this)}>
-            {this.state.curLang}
-          </Button> */}
-
-          {/* {this.state.defaultLang == null || this.state.defaultLang == 'ch' ? (
-            <img src={PNG_lang_en} style={{ position: 'relative', top: '3px', cursor: 'pointer' }} onClick={this.onChangeLanguage.bind(this)}></img>
-          ) : (
-            <img src={PNG_lang_ch} style={{ position: 'relative', top: '3px', cursor: 'pointer' }} onClick={this.onChangeLanguage.bind(this)}></img>
-          )} */}
+          </Balloon> */}
+          <Button text type="normal" style={{ color: '#808080', marginRight: '30px' }} onClick={this.manageAccount.bind(this)}>
+            {this.state.chainId == 56 ? 'BSC:' : (this.state.chainId == 128 ? 'Heco:' : '未知')}
+            {T(this.state.walletBtnInfo)}
+          </Button>
+          
 
           <UiDialog4
             className="ui-SwapMiner"

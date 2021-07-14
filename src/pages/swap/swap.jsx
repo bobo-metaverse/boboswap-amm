@@ -20,6 +20,7 @@ import { UiDialog } from '../../components/Ui/UiDialog';
 import { UiDialog2 } from '../../components/Ui/UiDialog2';
 import { UiDialog3 } from '../../components/Ui/UiDialog3';
 import { UiDialog4 } from '../../components/Ui/UiDialog4';
+// import { UiDialog5 } from '../../components/Ui/UiDialog5';
 import { UiProgressControl } from '../../components/Ui/UiProgressControl';
 
 import { Iconfont } from '../../components/Ui/iconfont';
@@ -528,8 +529,11 @@ export default class Swap extends Component {
       }
       return (
         <div key={assetInfo.symbol} className={classNames.join(' ')} style={{ cursor: needBtn ? 'pointer' : 'default' }} onClick={() => needBtn && this.clickAsset(assetInfo)}>
-          <a className="ui-assetInfo-account" target='_blank' 
-                href={assetInfo.assetid == '0' ? this.state.platformTokenInfo[chainId] : this.state.broswerInfo[this.state.chainId] + '/token/' + assetInfo.assetid}><u>{T('通证详情')}</u></a>
+          {
+            utils.isMobile() ? '' : 
+              <a className="ui-assetInfo-account" target='_blank' 
+                  href={assetInfo.assetid == '0' ? this.state.platformTokenInfo[chainId] : this.state.broswerInfo[this.state.chainId] + '/token/' + assetInfo.assetid}><u>{T('通证详情')}</u></a>
+          }
           {
             imgExist ? <img src={this.state.logoInfo[this.state.chainId] + (assetInfo.assetid == '0' ? assetInfo.logoAddr : assetInfo.assetid).toLowerCase() + '.png'}/>
                       :

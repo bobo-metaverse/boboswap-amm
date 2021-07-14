@@ -26,6 +26,7 @@ svg path:nth-child(1) {
 
 // 页内弹窗
 .ui-dialog {
+  width: 100%;
   position: fixed !important;
   top: 60px !important;
   left: 0 !important;
@@ -637,9 +638,9 @@ svg path:nth-child(1) {
 
 // 选择资产
 .ui-SelectAsset {
-  width: 810px;
+  width: 400px;
   .ui-dialog-body {
-    width: 810px;
+    width: 400px;
     height: 682px;
     .ui-dialog-header {
       box-shadow: 0px -3px 6px rgba(0, 0, 0, 1);
@@ -665,7 +666,7 @@ svg path:nth-child(1) {
 
 .ui-assetInfo {
   height: 226px;
-  width: 270px;
+  width: 100%;
   background-color: #fff; //rgba(48, 128, 254, 0.5);
   // border: 1px solid rgba(#c9cace, 0.3);
   position: relative;
