@@ -555,6 +555,21 @@ export default class Swap extends Component {
           ) : (
             ''
           )}
+          {
+            assetInfo.wrappedERC20 ? (
+              <div>
+                <div className="ui-btn" onClick={() => this.wrappAsset(assetInfo)}>
+                  {T('包装此通证').toLocaleUpperCase()}
+                </div>
+                <div className="ui-btn" onClick={() => this.unwrappAsset(assetInfo)}>
+                  {T('解包此通证').toLocaleUpperCase()}
+                </div>
+              </div>
+            )
+            :
+            ""
+          }
+          
         </div>
       );
     });
@@ -571,6 +586,12 @@ export default class Swap extends Component {
     const assetDisplayList = this.getAssetDisplayInfo(assetList);
     this.setState({ assetDisplayList });
   };
+
+  wrappAsset = (assetInfo) => {
+  }
+
+  unwrappAsset = (assetInfo) => {
+  }
 
   searchAsset = async () => {
     if (utils.isEmptyObj(this.state.assetContent)) {
@@ -949,7 +970,7 @@ export default class Swap extends Component {
               <div className="ui-card2">
                 <div style={styles.assetAmounInfo}>
                   <div>
-                    <font>{T('余额：')}</font>
+                    <font>{T('余额')}:</font>
                     <font>{this.state.fromInfo.maxValue}</font>
                   </div>
                   {/* <font>
@@ -980,7 +1001,7 @@ export default class Swap extends Component {
               <div className="ui-card2" style={{ marginTop: '10px' }}>
                 <div style={styles.assetAmounInfo}>
                   <div>
-                    <font>{T('余额：')}</font>
+                    <font>{T('余额')}:</font>
                     <font>{this.state.toInfo.maxValue}</font>
                   </div>
                   {/* <font>
@@ -1003,7 +1024,7 @@ export default class Swap extends Component {
                 {/* </div> */}
               </div>
               <Row justify="start" align="center" className="ui-swap-info-row" style={{ marginTop: '22px' }}>
-                <font>{T('可接受的最大滑点：')}</font>
+                <font>{T('可接受的最大滑点')}:</font>
                 {this.state.toleranceInputEnable && (
                   <Input
                     autoFocus
@@ -1022,7 +1043,7 @@ export default class Swap extends Component {
                 />
               </Row>
               <Row justify="start" align="center" className="ui-swap-info-row">
-                <font>{T('兑换手续费：')}</font>
+                <font>{T('兑换手续费')}:</font>
                 {
                   (this.state.fromInfo.selectAssetInfo != null && this.state.curPairInfo.feeAmount > 0) ? 
                   <div style={{ float: 'right' }}>(
@@ -1033,13 +1054,13 @@ export default class Swap extends Component {
                 <div style={{ float: 'right' }}>{this.state.feeRate / 10} %</div>
               </Row>
               <Row justify="start" align="center" className="ui-swap-info-row">
-                <font>{T('您的流动性占比：')}</font>
+                <font>{T('您的流动性占比')}:</font>
                 <div style={{ float: 'right' }}>{this.state.curPairInfo.myPercent} %</div>
               </Row>
               {
                 this.state.bLiquidOp ? '' :  
                                     <Row justify="start" align="center" className="ui-swap-info-row">
-                                      <font>{T('价格影响：')}</font>
+                                      <font>{T('价格影响')}:</font>
                                       {
                                         (this.state.curPairInfo.oldPrice != null && this.state.curPairInfo.newPrice != null) ? 
                                           <div style={{ float: 'right' }}>
@@ -1055,7 +1076,7 @@ export default class Swap extends Component {
               {
                 this.state.bLiquidOp ? '' :  
                                     <Row justify="start" align="center" className="ui-swap-info-row">
-                                      <font>{T('最低收到：')}</font>
+                                      <font>{T('最低收到')}:</font>
                                       <div style={{ float: 'right' }}>{this.state.curPairInfo.minReceivedAmount + (this.state.toInfo.selectAssetInfo ? this.state.toInfo.selectAssetInfo.symbol : '')} </div>
                                     </Row>
               }

@@ -21,7 +21,7 @@ export default class Logo extends PureComponent {
         {/* <Iconfont icon="oex" primary></Iconfont>*/}
         <div to="/" className="logo-text">
           <img src={logo_img} style={{ width: '40px', height: '40px' }}></img>
-          DefenderSwap
+          SwapUni
         </div> 
         
       </Link>

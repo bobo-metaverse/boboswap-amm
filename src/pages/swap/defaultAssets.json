@@ -102,6 +102,13 @@
           "symbol": "ETH",
           "decimals": 18,
           "assetid": "0x2170Ed0880ac9A755fd29B2688956BD959F933F8"
+        },
+        {
+          "name": "Wrapped Squidanomics",
+          "symbol": "wSQUID",
+          "decimals": 4,
+          "assetid": "0x022FaEF14d23e01C16B286114Ad3AA76A772Ae12",
+          "wrappedERC20": true
         }
       ]
     }
